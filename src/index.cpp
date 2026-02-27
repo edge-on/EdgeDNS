@@ -1,25 +1,14 @@
 #include "index.hpp"
 
-void write16(std::vector<uint8_t>& buf, uint16_t value)
-{
-    uint16_t net = htons(value);
-    uint8_t* p = (uint8_t*)&net;
-    buf.push_back(p[0]);
-    buf.push_back(p[1]);
-}
-
-void write32(std::vector<uint8_t>& buf, uint32_t value)
-{
-    uint32_t net = htonl(value);
-    uint8_t* p = (uint8_t*)&net;
-    buf.push_back(p[0]);
-    buf.push_back(p[1]);
-    buf.push_back(p[2]);
-    buf.push_back(p[3]);
-}
-
 int main()
 {
+    EoD* eod = new EoD();
+    eod->start();
+
+    return 0;
+}
+
+/*
     int udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (udp_fd < 0)
     {
@@ -167,5 +156,4 @@ int main()
     }
 
     close(udp_fd);
-    return 0;
-}
+    */

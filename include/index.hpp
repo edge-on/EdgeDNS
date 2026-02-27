@@ -9,6 +9,8 @@
 #include <iomanip>
 #include <vector>
 
+#include "Core/EoD.hpp"
+
 class Main
 {
 public:
