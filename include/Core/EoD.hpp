@@ -14,6 +14,7 @@
 #include <fcntl.h>
 
 #include <unordered_map>
+#include "unordered_map"
 
 class EoD
 {
@@ -24,6 +25,10 @@ public:
     struct Connection
     {
         int fd;
+
+        std::vector<uint8_t> readBuffer;
+        std::vector<uint8_t> writeBuffer;
+        uint16_t expectedLength = 0;
     };
 
     std::unordered_map<int, Connection> connections;
@@ -62,6 +67,12 @@ public:
 
     void initTCP();
     void handleTCP(Connection &conn);
+    void writeTCP(Connection &conn);
+
+    void enableWrite(int fd, int epoll_fd);
+    void disableWrite(int fd, int epoll_fd);
+
+    std::vector<uint8_t> handle(uint8_t buffer[4096], bool is_tcp);
 
 private:
     int eod_port = 8901;

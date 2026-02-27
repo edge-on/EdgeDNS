@@ -78,6 +78,11 @@ void EoD::start()
                 {
                     handleTCP(conn);
                 }
+
+                if (events[i].events & EPOLLOUT)
+                {
+                    writeTCP(conn);
+                }
             }
         }
     }
@@ -123,7 +128,128 @@ void EoD::handleUDP()
 
     size_t received = recvfrom(eod_udp_fd, buffer, sizeof(buffer), 0, (sockaddr *)&client, &len);
 
-    size_t offset = 0;
+    std::vector<uint8_t> response = handle(buffer, false);
+
+    sendto(eod_udp_fd, response.data(), response.size(), 0,
+           (sockaddr *)&client, len);
+}
+
+void EoD::initTCP()
+{
+    eod_tcp_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    makeNonBlocking(eod_tcp_fd);
+
+    if (eod_tcp_fd == 0)
+    {
+        perror("eod tcp socket");
+    }
+
+    sockaddr_in eod_addr{};
+    eod_addr.sin_family = AF_INET;
+    eod_addr.sin_addr.s_addr = INADDR_ANY;
+    eod_addr.sin_port = htons(eod_port);
+
+    if (bind(eod_tcp_fd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
+    {
+        perror("eod tcp bind");
+    }
+
+    if (listen(eod_tcp_fd, SOMAXCONN) < 0)
+    {
+        perror("eod tcp listen");
+    }
+
+    epoll_event event{};
+    event.events = EPOLLIN | EPOLLET;
+    event.data.fd = eod_tcp_fd;
+
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, eod_tcp_fd, &event) < 0)
+    {
+        perror("epoll tcp ctl");
+    }
+}
+
+void EoD::handleTCP(Connection &conn)
+{
+    uint8_t temp[4096];
+    ssize_t n = read(conn.fd, temp, sizeof(temp));
+
+    if (n <= 0)
+        return;
+
+    conn.readBuffer.insert(conn.readBuffer.end(), temp, temp + n);
+
+    while (true)
+    {
+        if (conn.expectedLength == 0)
+        {
+            if (conn.readBuffer.size() < 2)
+                return;
+
+            conn.expectedLength =
+                (conn.readBuffer[0] << 8) |
+                (conn.readBuffer[1]);
+
+            conn.readBuffer.erase(conn.readBuffer.begin(),
+                                  conn.readBuffer.begin() + 2);
+        }
+
+        if (conn.readBuffer.size() < conn.expectedLength)
+            return;
+
+        std::vector<uint8_t> dnsPacket(
+            conn.readBuffer.begin(),
+            conn.readBuffer.begin() + conn.expectedLength);
+
+        conn.readBuffer.erase(conn.readBuffer.begin(),
+                              conn.readBuffer.begin() + conn.expectedLength);
+
+        conn.expectedLength = 0;
+
+        auto response = handle(dnsPacket.data(), false);
+
+        uint16_t len = htons(response.size());
+
+        conn.writeBuffer.insert(conn.writeBuffer.end(),
+                                (uint8_t *)&len,
+                                (uint8_t *)&len + 2);
+
+        conn.writeBuffer.insert(conn.writeBuffer.end(),
+                                response.begin(),
+                                response.end());
+
+        enableWrite(conn.fd, epoll_fd);
+    }
+}
+
+void EoD::writeTCP(Connection &conn)
+{
+    while (!conn.writeBuffer.empty())
+    {
+        ssize_t sent = send(conn.fd,
+                            conn.writeBuffer.data(),
+                            conn.writeBuffer.size(),
+                            0);
+
+        if (sent < 0)
+        {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                return;
+            return;
+        }
+
+        conn.writeBuffer.erase(
+            conn.writeBuffer.begin(),
+            conn.writeBuffer.begin() + sent);
+    }
+
+    disableWrite(conn.fd, epoll_fd);
+}
+
+std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
+{
+    size_t offset = is_tcp ? 2 : 0;
 
     auto read16 = [&](void)
     {
@@ -235,55 +361,23 @@ void EoD::handleUDP()
     response.push_back(3);
     response.push_back(4);
 
-    sendto(eod_udp_fd, response.data(), response.size(), 0,
-           (sockaddr *)&client, len);
+    return response;
 }
 
-void EoD::initTCP()
+void EoD::enableWrite(int fd, int epoll_fd)
 {
-    eod_tcp_fd = socket(AF_INET, SOCK_STREAM, 0);
+    epoll_event ev{};
+    ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+    ev.data.fd = fd;
 
-    makeNonBlocking(eod_tcp_fd);
-
-    if (eod_tcp_fd == 0)
-    {
-        perror("eod tcp socket");
-    }
-
-    sockaddr_in eod_addr{};
-    eod_addr.sin_family = AF_INET;
-    eod_addr.sin_addr.s_addr = INADDR_ANY;
-    eod_addr.sin_port = htons(eod_port);
-
-    if (bind(eod_tcp_fd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
-    {
-        perror("eod tcp bind");
-    }
-
-    if (listen(eod_tcp_fd, SOMAXCONN) < 0)
-    {
-        perror("eod tcp listen");
-    }
-
-    epoll_event event{};
-    event.events = EPOLLIN | EPOLLET;
-    event.data.fd = eod_tcp_fd;
-
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, eod_tcp_fd, &event) < 0)
-    {
-        perror("epoll tcp ctl");
-    }
+    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev);
 }
 
-void EoD::handleTCP(Connection &conn)
+void EoD::disableWrite(int fd, int epoll_fd)
 {
-    char buffer[4096];
+    epoll_event ev{};
+    ev.events = EPOLLIN | EPOLLET;
+    ev.data.fd = fd;
 
-    ssize_t n = read(conn.fd, buffer, sizeof(buffer));
-
-    if (n <= 0)
-        return;
-
-    std::cout.write(buffer, n);
-    std::cout << std::endl;
+    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev);
 }
