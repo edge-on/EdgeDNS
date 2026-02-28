@@ -75,7 +75,7 @@ public:
     std::vector<uint8_t> handle(uint8_t buffer[4096], bool is_tcp);
 
 private:
-    int eod_port = 8901;
+    int eod_port = 8902;
 
     int epoll_fd;
 
@@ -83,4 +83,6 @@ private:
     int eod_tcp_fd;
 
     int max_event = 10;
+
+    bool is_logging = false;
 };

@@ -83,6 +83,12 @@ void EoD::start()
                 {
                     writeTCP(conn);
                 }
+
+                if (n == 0)
+                {
+                    close(conn.fd);
+                    connections.erase(conn.fd);
+                }
             }
         }
     }
@@ -121,17 +127,54 @@ void EoD::initUDP()
 
 void EoD::handleUDP()
 {
-    uint8_t buffer[4096];
+    constexpr int BATCH = 64 * 4;
+    constexpr int BUF_SIZE = 1024 * 4;
 
-    sockaddr_in client{};
-    socklen_t len = sizeof(client);
+    struct mmsghdr msgs[BATCH];
+    struct iovec iovecs[BATCH];
+    struct sockaddr_in clients[BATCH];
+    uint8_t buffers[BATCH][BUF_SIZE];
 
-    size_t received = recvfrom(eod_udp_fd, buffer, sizeof(buffer), 0, (sockaddr *)&client, &len);
+    for (int i = 0; i < BATCH; i++)
+    {
+        iovecs[i].iov_base = buffers[i];
+        iovecs[i].iov_len = BUF_SIZE;
 
-    std::vector<uint8_t> response = handle(buffer, false);
+        msgs[i].msg_hdr.msg_iov = &iovecs[i];
+        msgs[i].msg_hdr.msg_iovlen = 1;
+        msgs[i].msg_hdr.msg_name = &clients[i];
+        msgs[i].msg_hdr.msg_namelen = sizeof(sockaddr_in);
+        msgs[i].msg_hdr.msg_control = nullptr;
+        msgs[i].msg_hdr.msg_controllen = 0;
+        msgs[i].msg_hdr.msg_flags = 0;
+    }
 
-    sendto(eod_udp_fd, response.data(), response.size(), 0,
-           (sockaddr *)&client, len);
+    int received = recvmmsg(
+        eod_udp_fd,
+        msgs,
+        BATCH,
+        MSG_WAITFORONE,
+        nullptr);
+
+    if (received <= 0)
+        return;
+
+    for (int i = 0; i < received; i++)
+    {
+
+        int len = msgs[i].msg_len;
+
+        std::vector<uint8_t> response =
+            handle(buffers[i], false);
+
+        sendto(
+            eod_udp_fd,
+            response.data(),
+            response.size(),
+            0,
+            (sockaddr *)&clients[i],
+            msgs[i].msg_hdr.msg_namelen);
+    }
 }
 
 void EoD::initTCP()
@@ -144,6 +187,9 @@ void EoD::initTCP()
     {
         perror("eod tcp socket");
     }
+
+    int opt = 1;
+    setsockopt(eod_tcp_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 
     sockaddr_in eod_addr{};
     eod_addr.sin_family = AF_INET;
@@ -285,19 +331,6 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
 
     size_t question_end = offset;
 
-    std::cout << "=== HEADER ===" << std::endl;
-    std::cout << "Transcation ID: " << transcation_id << std::endl;
-    std::cout << "Flags: " << flags << std::endl;
-    std::cout << "QD Count: " << qdcount << std::endl;
-    std::cout << "AN Count: " << ancount << std::endl;
-    std::cout << "NS Count: " << nscount << std::endl;
-    std::cout << "AR Count: " << arcount << std::endl;
-
-    std::cout << "=== QUESTIONS ===" << std::endl;
-    std::cout << "Q Name: " << name << std::endl;
-    std::cout << "Q Type: " << qtype << std::endl;
-    std::cout << "Q Class: " << qclass << std::endl;
-
     // Additional Section
     uint8_t opt_name = buffer[offset++];
 
@@ -316,16 +349,32 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
         offset += rd_length;
     }
 
-    std::cout << "=== OPT ===" << std::endl;
-    std::cout << "Opt Name: " << opt_name << std::endl;
-    std::cout << "Opt Type: " << opt_type << std::endl;
-    std::cout << "Opt Class: " << opt_class << std::endl;
+    if (is_logging)
+    {
+        std::cout << "=== HEADER ===" << std::endl;
+        std::cout << "Transcation ID: " << transcation_id << std::endl;
+        std::cout << "Flags: " << flags << std::endl;
+        std::cout << "QD Count: " << qdcount << std::endl;
+        std::cout << "AN Count: " << ancount << std::endl;
+        std::cout << "NS Count: " << nscount << std::endl;
+        std::cout << "AR Count: " << arcount << std::endl;
 
-    std::cout << "Opt RCODE: " << extended_rcode << std::endl;
-    std::cout << "Opt EDNS Version: " << edns_version << std::endl;
-    std::cout << "Opt Flags: " << opt_flags << std::endl;
+        std::cout << "=== QUESTIONS ===" << std::endl;
+        std::cout << "Q Name: " << name << std::endl;
+        std::cout << "Q Type: " << qtype << std::endl;
+        std::cout << "Q Class: " << qclass << std::endl;
 
-    std::cout << "RD Length: " << rd_length << std::endl;
+        std::cout << "=== OPT ===" << std::endl;
+        std::cout << "Opt Name: " << opt_name << std::endl;
+        std::cout << "Opt Type: " << opt_type << std::endl;
+        std::cout << "Opt Class: " << opt_class << std::endl;
+
+        std::cout << "Opt RCODE: " << extended_rcode << std::endl;
+        std::cout << "Opt EDNS Version: " << edns_version << std::endl;
+        std::cout << "Opt Flags: " << opt_flags << std::endl;
+
+        std::cout << "RD Length: " << rd_length << std::endl;
+    }
 
     // Response
 
@@ -335,31 +384,52 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
 
     // Flags
     uint16_t response_flags = 0;
-    response_flags |= 0x8000; // QR = 1 (response)
-    response_flags |= 0x0400; // AA = 1 (authoritative)
 
-    if (flags & 0x0100) // RD
-        response_flags |= 0x0100;
+    response_flags |= 0x8000;
+    response_flags |= (flags & 0x7800);
+    response_flags |= (flags & 0x0100);
+
+    response_flags &= ~0x000F;
+
+    int qdc = 1;
+    int anc = 1;
+    int nsc = 0;
+    int arc = 0;
+
+    if (qclass != 1)
+    {
+        response_flags |= 0x0005;
+
+        anc = 0;
+    }
+    else
+    {
+        response_flags |= 0x0400; // AA
+    }
 
     write16(response, response_flags);
 
-    write16(response, 1); // QDCOUNT
-    write16(response, 1); // ANCOUNT
-    write16(response, 0); // NSCOUNT
-    write16(response, 0); // ARCOUNT
+    write16(response, qdc); // QDCOUNT
+    write16(response, anc); // ANCOUNT
+    write16(response, 0);   // NSCOUNT
+    write16(response, 0);   // ARCOUNT
 
     response.insert(response.end(), buffer + 12, buffer + question_end);
 
-    write16(response, 0xC00C);
-    write16(response, 1);  // A
-    write16(response, 1);  // IN
-    write32(response, 60); // 60 Seconds
-    write16(response, 4);
+    if (qclass == 1)
+    {
+        write16(response, 0xC00C);
 
-    response.push_back(1);
-    response.push_back(2);
-    response.push_back(3);
-    response.push_back(4);
+        write16(response, 1);  // A
+        write16(response, 1);  // IN
+        write32(response, 60); // 60 Seconds
+        write16(response, 4);
+
+        response.push_back(1);
+        response.push_back(2);
+        response.push_back(3);
+        response.push_back(4);
+    }
 
     return response;
 }
