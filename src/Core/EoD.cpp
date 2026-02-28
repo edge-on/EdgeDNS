@@ -1,6 +1,6 @@
 #include "Core/EoD.hpp"
 
-EoD::EoD()
+EoD::EoD() : activeThreads({})
 {
 }
 
@@ -10,24 +10,39 @@ EoD::~EoD()
 
 void EoD::start()
 {
-    epoll_fd = epoll_create1(0);
+    for (int i = 0; i < threadCount; ++i)
+    {
+        threads.emplace_back(&EoD::worker, this, i);
+    }
 
-    initUDP();
-    initTCP();
+    for (auto &t : threads)
+    {
+        t.join();
+    }
+}
+
+void EoD::worker(int th)
+{
+    Thread &thread = activeThreads[th];
+
+    thread.epoll_fd = epoll_create1(0);
+
+    initUDP(thread);
+    initTCP(thread);
 
     epoll_event events[max_event];
 
     while (true)
     {
-        int n = epoll_wait(epoll_fd, events, max_event, -1);
+        int n = epoll_wait(thread.epoll_fd, events, max_event, -1);
 
         for (int i = 0; i < n; ++i)
         {
-            if (events[i].data.fd == eod_udp_fd)
+            if (events[i].data.fd == thread.eod_udp_fd)
             {
-                handleUDP();
+                handleUDP(thread);
             }
-            else if (events[i].data.fd == eod_tcp_fd)
+            else if (events[i].data.fd == thread.eod_tcp_fd)
             {
                 sockaddr_in event{};
 
@@ -35,7 +50,7 @@ void EoD::start()
                 {
                     socklen_t len = sizeof(event);
 
-                    int client_fd = accept(eod_tcp_fd, (sockaddr *)&event, &len);
+                    int client_fd = accept(thread.eod_tcp_fd, (sockaddr *)&event, &len);
 
                     if (client_fd == -1)
                     {
@@ -55,19 +70,19 @@ void EoD::start()
                     Connection conn{};
                     conn.fd = client_fd;
 
-                    connections.emplace(client_fd, std::move(conn));
+                    thread.connections.emplace(client_fd, std::move(conn));
 
                     epoll_event e{};
                     e.data.fd = client_fd;
                     e.events = EPOLLIN | EPOLLET;
 
-                    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &e);
+                    epoll_ctl(thread.epoll_fd, EPOLL_CTL_ADD, client_fd, &e);
                 }
             }
             else
             {
-                auto it = connections.find(events[i].data.fd);
-                if (it == connections.end())
+                auto it = thread.connections.find(events[i].data.fd);
+                if (it == thread.connections.end())
                 {
                     continue;
                 }
@@ -76,56 +91,59 @@ void EoD::start()
 
                 if (events[i].events & EPOLLIN)
                 {
-                    handleTCP(conn);
+                    handleTCP(conn, thread);
                 }
 
                 if (events[i].events & EPOLLOUT)
                 {
-                    writeTCP(conn);
+                    writeTCP(conn, thread);
                 }
 
                 if (n == 0)
                 {
                     close(conn.fd);
-                    connections.erase(conn.fd);
+                    thread.connections.erase(conn.fd);
                 }
             }
         }
     }
 }
 
-void EoD::initUDP()
+void EoD::initUDP(Thread &thread)
 {
-    eod_udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    thread.eod_udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
 
-    makeNonBlocking(eod_udp_fd);
+    makeNonBlocking(thread.eod_udp_fd);
 
-    if (eod_udp_fd == 0)
+    if (thread.eod_udp_fd == 0)
     {
         perror("eod socket");
     }
+
+    int opt = 1;
+    setsockopt(thread.eod_udp_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 
     sockaddr_in eod_addr{};
     eod_addr.sin_family = AF_INET;
     eod_addr.sin_addr.s_addr = INADDR_ANY;
     eod_addr.sin_port = htons(eod_port);
 
-    if (bind(eod_udp_fd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
+    if (bind(thread.eod_udp_fd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
     {
         perror("eod bind");
     }
 
     epoll_event event{};
     event.events = EPOLLIN | EPOLLET;
-    event.data.fd = eod_udp_fd;
+    event.data.fd = thread.eod_udp_fd;
 
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, eod_udp_fd, &event) < 0)
+    if (epoll_ctl(thread.epoll_fd, EPOLL_CTL_ADD, thread.eod_udp_fd, &event) < 0)
     {
         perror("epoll ctl");
     }
 }
 
-void EoD::handleUDP()
+void EoD::handleUDP(Thread &thread)
 {
     constexpr int BATCH = 64 * 4;
     constexpr int BUF_SIZE = 1024 * 4;
@@ -150,7 +168,7 @@ void EoD::handleUDP()
     }
 
     int received = recvmmsg(
-        eod_udp_fd,
+        thread.eod_udp_fd,
         msgs,
         BATCH,
         MSG_WAITFORONE,
@@ -168,7 +186,7 @@ void EoD::handleUDP()
             handle(buffers[i], false);
 
         sendto(
-            eod_udp_fd,
+            thread.eod_udp_fd,
             response.data(),
             response.size(),
             0,
@@ -177,46 +195,46 @@ void EoD::handleUDP()
     }
 }
 
-void EoD::initTCP()
+void EoD::initTCP(Thread &thread)
 {
-    eod_tcp_fd = socket(AF_INET, SOCK_STREAM, 0);
+    thread.eod_tcp_fd = socket(AF_INET, SOCK_STREAM, 0);
 
-    makeNonBlocking(eod_tcp_fd);
+    makeNonBlocking(thread.eod_tcp_fd);
 
-    if (eod_tcp_fd == 0)
+    if (thread.eod_tcp_fd == 0)
     {
         perror("eod tcp socket");
     }
 
     int opt = 1;
-    setsockopt(eod_tcp_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
+    setsockopt(thread.eod_tcp_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 
     sockaddr_in eod_addr{};
     eod_addr.sin_family = AF_INET;
     eod_addr.sin_addr.s_addr = INADDR_ANY;
     eod_addr.sin_port = htons(eod_port);
 
-    if (bind(eod_tcp_fd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
+    if (bind(thread.eod_tcp_fd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
     {
         perror("eod tcp bind");
     }
 
-    if (listen(eod_tcp_fd, SOMAXCONN) < 0)
+    if (listen(thread.eod_tcp_fd, SOMAXCONN) < 0)
     {
         perror("eod tcp listen");
     }
 
     epoll_event event{};
     event.events = EPOLLIN | EPOLLET;
-    event.data.fd = eod_tcp_fd;
+    event.data.fd = thread.eod_tcp_fd;
 
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, eod_tcp_fd, &event) < 0)
+    if (epoll_ctl(thread.epoll_fd, EPOLL_CTL_ADD, thread.eod_tcp_fd, &event) < 0)
     {
         perror("epoll tcp ctl");
     }
 }
 
-void EoD::handleTCP(Connection &conn)
+void EoD::handleTCP(Connection &conn, Thread &thread)
 {
     uint8_t temp[4096];
     ssize_t n = read(conn.fd, temp, sizeof(temp));
@@ -265,11 +283,11 @@ void EoD::handleTCP(Connection &conn)
                                 response.begin(),
                                 response.end());
 
-        enableWrite(conn.fd, epoll_fd);
+        enableWrite(conn.fd, thread.epoll_fd);
     }
 }
 
-void EoD::writeTCP(Connection &conn)
+void EoD::writeTCP(Connection &conn, Thread &thread)
 {
     while (!conn.writeBuffer.empty())
     {
@@ -290,7 +308,7 @@ void EoD::writeTCP(Connection &conn)
             conn.writeBuffer.begin() + sent);
     }
 
-    disableWrite(conn.fd, epoll_fd);
+    disableWrite(conn.fd, thread.epoll_fd);
 }
 
 std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)

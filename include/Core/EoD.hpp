@@ -13,8 +13,9 @@
 
 #include <fcntl.h>
 
+#include <thread>
+
 #include <unordered_map>
-#include "unordered_map"
 
 class EoD
 {
@@ -31,7 +32,17 @@ public:
         uint16_t expectedLength = 0;
     };
 
-    std::unordered_map<int, Connection> connections;
+    struct Thread
+    {
+        int epoll_fd;
+
+        int eod_udp_fd;
+        int eod_tcp_fd;
+
+        std::unordered_map<int, Connection> connections;
+    };
+
+    std::unordered_map<int, Thread> activeThreads;
 
     void write16(std::vector<uint8_t> &buf, uint16_t value)
     {
@@ -62,12 +73,14 @@ public:
 
     void start();
 
-    void initUDP();
-    void handleUDP();
+    void worker(int th);
 
-    void initTCP();
-    void handleTCP(Connection &conn);
-    void writeTCP(Connection &conn);
+    void initUDP(Thread &th);
+    void handleUDP(Thread &th);
+
+    void initTCP(Thread &th);
+    void handleTCP(Connection &conn, Thread &th);
+    void writeTCP(Connection &conn, Thread &th);
 
     void enableWrite(int fd, int epoll_fd);
     void disableWrite(int fd, int epoll_fd);
@@ -77,12 +90,10 @@ public:
 private:
     int eod_port = 8902;
 
-    int epoll_fd;
-
-    int eod_udp_fd;
-    int eod_tcp_fd;
-
     int max_event = 10;
 
     bool is_logging = false;
+
+    int threadCount = 16;
+    std::vector<std::thread> threads;
 };
