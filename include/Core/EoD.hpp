@@ -94,6 +94,6 @@ private:
 
     bool is_logging = false;
 
-    int threadCount = 16;
+    int threadCount = 1;
     std::vector<std::thread> threads;
 };

@@ -10,6 +10,8 @@ EoD::~EoD()
 
 void EoD::start()
 {
+    threadCount = std::thread::hardware_concurrency();
+
     for (int i = 0; i < threadCount; ++i)
     {
         threads.emplace_back(&EoD::worker, this, i);
