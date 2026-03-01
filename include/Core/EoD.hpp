@@ -15,8 +15,9 @@
 
 #include <thread>
 
-#include <ankerl/unordered_dense.h>
 #include <unordered_map>
+
+#include "DNS/DNS.hpp"
 
 class EoD
 {
@@ -44,15 +45,6 @@ public:
     };
 
     std::unordered_map<int, Thread> activeThreads;
-
-    struct Record
-    {
-        uint16_t type;
-        uint32_t ttl;
-        std::vector<uint8_t> rdata;
-    };
-
-    ankerl::unordered_dense::map<std::string, std::vector<Record>> zone;
 
     void write16(std::vector<uint8_t> &buf, uint16_t value)
     {

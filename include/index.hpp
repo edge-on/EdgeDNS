@@ -10,6 +10,9 @@
 #include <vector>
 
 #include "Core/EoD.hpp"
+#include "DNS/DNS.hpp"
+#include "Cassandra/Cassandra.hpp"
+#include "Utils/Vector.hpp"
 
 class Main
 {
