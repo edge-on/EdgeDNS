@@ -319,136 +319,156 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
 
     auto read16 = [&](void)
     {
-        uint16_t value = (buffer[offset] << 8) | buffer[offset + 1];
+        uint16_t v = (buffer[offset] << 8) | buffer[offset + 1];
         offset += 2;
-        return value;
+        return v;
     };
 
-    uint16_t transcation_id = read16(); // Transcation ID
-    uint16_t flags = read16();          // Flags
-    uint16_t qdcount = read16();
-    uint16_t ancount = read16();
-    uint16_t nscount = read16();
-    uint16_t arcount = read16();
+    auto write16 = [&](std::vector<uint8_t> &out, uint16_t v)
+    {
+        out.push_back((v >> 8) & 0xFF);
+        out.push_back(v & 0xFF);
+    };
 
-    std::string name;
+    auto write32 = [&](std::vector<uint8_t> &out, uint32_t v)
+    {
+        out.push_back((v >> 24) & 0xFF);
+        out.push_back((v >> 16) & 0xFF);
+        out.push_back((v >> 8) & 0xFF);
+        out.push_back(v & 0xFF);
+    };
+
+    // ---------------- HEADER ----------------
+    uint16_t transaction_id = read16();
+    uint16_t flags = read16();
+    uint16_t qdcount = read16();
+    read16(); // ancount
+    read16(); // nscount
+    read16(); // arcount
+
+    // ---------------- READ QNAME ----------------
+    std::vector<uint8_t> nameWire;
+
+    size_t name_start = offset;
 
     while (buffer[offset] != 0)
     {
-        size_t len = buffer[offset++];
-
-        for (int i = 0; i < len; ++i)
-        {
-            name += (char)buffer[offset++];
-        }
-        name += ".";
+        uint8_t len = buffer[offset++];
+        offset += len;
     }
 
-    offset++;
+    offset++; // root
+
+    nameWire.insert(nameWire.end(),
+                    buffer + name_start,
+                    buffer + offset);
 
     uint16_t qtype = read16();
     uint16_t qclass = read16();
 
     size_t question_end = offset;
 
-    // Additional Section
-    uint8_t opt_name = buffer[offset++];
+    // ---------------- FIND ZONE (Longest suffix) ----------------
+    std::vector<uint8_t> zoneWire;
 
-    uint16_t opt_type = read16();
-    uint16_t opt_class = read16();
-
-    uint8_t extended_rcode = buffer[offset++];
-    uint8_t edns_version = buffer[offset++];
-
-    uint16_t opt_flags = read16();
-
-    uint16_t rd_length = read16();
-
-    if (rd_length > 0)
+    size_t i = 0;
+    while (i < nameWire.size() && nameWire[i] != 0)
     {
-        offset += rd_length;
+        std::vector<uint8_t> candidate(nameWire.begin() + i,
+                                       nameWire.end());
+
+        if (DNS::zones.find(candidate) != DNS::zones.end())
+        {
+            zoneWire = candidate;
+            break;
+        }
+
+        i += nameWire[i] + 1;
     }
 
-    if (is_logging)
-    {
-        std::cout << "=== HEADER ===" << std::endl;
-        std::cout << "Transcation ID: " << transcation_id << std::endl;
-        std::cout << "Flags: " << flags << std::endl;
-        std::cout << "QD Count: " << qdcount << std::endl;
-        std::cout << "AN Count: " << ancount << std::endl;
-        std::cout << "NS Count: " << nscount << std::endl;
-        std::cout << "AR Count: " << arcount << std::endl;
-
-        std::cout << "=== QUESTIONS ===" << std::endl;
-        std::cout << "Q Name: " << name << std::endl;
-        std::cout << "Q Type: " << qtype << std::endl;
-        std::cout << "Q Class: " << qclass << std::endl;
-
-        std::cout << "=== OPT ===" << std::endl;
-        std::cout << "Opt Name: " << opt_name << std::endl;
-        std::cout << "Opt Type: " << opt_type << std::endl;
-        std::cout << "Opt Class: " << opt_class << std::endl;
-
-        std::cout << "Opt RCODE: " << extended_rcode << std::endl;
-        std::cout << "Opt EDNS Version: " << edns_version << std::endl;
-        std::cout << "Opt Flags: " << opt_flags << std::endl;
-
-        std::cout << "RD Length: " << rd_length << std::endl;
-    }
-
-    // Response
-
+    // ---------------- BUILD RESPONSE ----------------
     std::vector<uint8_t> response;
 
-    write16(response, transcation_id); // Transaction ID
+    write16(response, transaction_id);
 
-    // Flags
     uint16_t response_flags = 0;
+    response_flags |= 0x8000;           // QR
+    response_flags |= (flags & 0x0100); // RD mirror
+    response_flags |= 0x0400;           // AA
 
-    response_flags |= 0x8000;
-    response_flags |= (flags & 0x7800);
-    response_flags |= (flags & 0x0100);
-
-    response_flags &= ~0x000F;
-
-    int qdc = 1;
-    int anc = 1;
-    int nsc = 0;
-    int arc = 0;
+    uint16_t anc = 0;
 
     if (qclass != 1)
-    {
-        response_flags |= 0x0005;
-
-        anc = 0;
-    }
-    else
-    {
-        response_flags |= 0x0400; // AA
-    }
+        response_flags |= 0x0004; // NOTIMP
 
     write16(response, response_flags);
+    write16(response, 1); // QDCOUNT
+    write16(response, 0); // ANCOUNT placeholder
+    write16(response, 0); // NSCOUNT
+    write16(response, 0); // ARCOUNT
 
-    write16(response, qdc); // QDCOUNT
-    write16(response, anc); // ANCOUNT
-    write16(response, 0);   // NSCOUNT
-    write16(response, 0);   // ARCOUNT
+    // copy question
+    response.insert(response.end(),
+                    buffer + (is_tcp ? 14 : 12),
+                    buffer + question_end);
 
-    response.insert(response.end(), buffer + 12, buffer + question_end);
-
+    // ---------------- ANSWER ----------------
     if (qclass == 1)
     {
-        write16(response, 0xC00C);
+        if (!zoneWire.empty())
+        {
+            auto zoneIt = DNS::zones.find(zoneWire);
+            auto nameIt = zoneIt->second.find(nameWire);
 
-        write16(response, 1);  // A
-        write16(response, 1);  // IN
-        write32(response, 60); // 60 Seconds
-        write16(response, 4);
+            if (nameIt != zoneIt->second.end())
+            {
+                for (auto &record : nameIt->second)
+                {
+                    if (record.type != qtype)
+                        continue;
 
-        response.push_back(1);
-        response.push_back(2);
-        response.push_back(3);
-        response.push_back(4);
+                    write16(response, 0xC00C); // pointer
+                    write16(response, record.type);
+                    write16(response, 1); // IN (rcode)
+                    write32(response, record.ttl);
+                    write16(response, record.rdata.size());
+
+                    response.insert(response.end(),
+                                    record.rdata.begin(),
+                                    record.rdata.end());
+
+                    anc++;
+                }
+
+                if (anc == 0)
+                {
+                    // NOERROR, empty answer
+                }
+            }
+            else
+            {
+                response_flags |= 0x0003; // NXDOMAIN
+            }
+        }
+        else
+        {
+            response_flags |= 0x0005; // REFUSED
+        }
+    }
+
+    // ---------------- FIX HEADER ----------------
+    response[6] = (anc >> 8) & 0xFF;
+    response[7] = anc & 0xFF;
+
+    response[2] = (response_flags >> 8) & 0xFF;
+    response[3] = response_flags & 0xFF;
+
+    // ---------------- TCP LENGTH PREFIX ----------------
+    if (is_tcp)
+    {
+        uint16_t len = response.size();
+        response.insert(response.begin(), len & 0xFF);
+        response.insert(response.begin(), (len >> 8) & 0xFF);
     }
 
     return response;

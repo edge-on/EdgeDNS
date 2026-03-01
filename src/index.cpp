@@ -6,7 +6,7 @@ int main()
 
     if (cas->connect())
     {
-        const CassResult *result = cas->execute("SELECT * FROM atlas.edges;");
+        const CassResult *result = cas->execute("SELECT * FROM edgeon.records;");
         CassIterator *iterator = cass_iterator_from_result(result);
 
         while (cass_iterator_next(iterator))
@@ -47,7 +47,7 @@ int main()
             record.ttl = static_cast<uint32_t>(ttl);
             record.rdata = std::move(rdata);
 
-            DNS::zones[zone][nameWire].push_back(std::move(record));
+            DNS::zones[Utils::Vector::stringToWire(zone)][nameWire].push_back(std::move(record));
         }
 
         cass_iterator_free(iterator);

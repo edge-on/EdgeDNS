@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 #include <string>
+#include <algorithm>
 
 namespace Utils
 {
@@ -25,6 +26,46 @@ namespace Utils
         static std::vector<uint8_t> stringToBytes(const std::string &str)
         {
             return std::vector<uint8_t>(str.begin(), str.end());
+        }
+
+        static std::vector<uint8_t> stringToWire(const std::string &input)
+        {
+            std::vector<uint8_t> wire;
+
+            std::string domain = input;
+
+            std::transform(domain.begin(), domain.end(), domain.begin(),
+                           [](unsigned char c)
+                           { return std::tolower(c); });
+
+            if (!domain.empty() && domain.back() == '.')
+                domain.pop_back();
+
+            size_t pos = 0;
+
+            while (pos < domain.size())
+            {
+                size_t dot = domain.find('.', pos);
+                if (dot == std::string::npos)
+                    dot = domain.size();
+
+                size_t len = dot - pos;
+
+                if (len == 0 || len > 63)
+                    throw std::runtime_error("Invalid label length");
+
+                wire.push_back(static_cast<uint8_t>(len));
+
+                wire.insert(wire.end(),
+                            domain.begin() + pos,
+                            domain.begin() + dot);
+
+                pos = dot + 1;
+            }
+
+            wire.push_back(0);
+
+            return wire;
         }
     };
 } // namespace Utils
