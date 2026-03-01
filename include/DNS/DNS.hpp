@@ -31,10 +31,29 @@ public:
         std::vector<Record>,
         ByteVecHash>;
 
+    struct Zone
+    {
+        uint32_t id;
+        NameMap names;
+    };
+
     using ZoneMap = ankerl::unordered_dense::map<
         std::vector<uint8_t>,
-        NameMap,
+        Zone,
         ByteVecHash>;
 
     static ZoneMap zones;
+
+    struct RRLKey
+    {
+        uint64_t prefix; // IPv4/24 and IPv6/64 (prefix)
+        uint32_t zone_id;
+        uint8_t rcode;
+    };
+
+    struct RRLBucket
+    {
+    };
+
+    ankerl::unordered_dense::map<RRLKey, RRLBucket> RRLBuckets;
 };

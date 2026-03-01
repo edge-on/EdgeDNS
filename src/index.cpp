@@ -47,7 +47,16 @@ int main()
             record.ttl = static_cast<uint32_t>(ttl);
             record.rdata = std::move(rdata);
 
-            DNS::zones[Utils::Vector::stringToWire(zone)][nameWire].push_back(std::move(record));
+            std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone);
+
+            auto [it, inserted] = DNS::zones.try_emplace(zoneWire);
+
+            if (inserted)
+            {
+                it->second.id = next_zone_id++;
+            }
+
+            it->second.names[nameWire].push_back(std::move(record));
         }
 
         cass_iterator_free(iterator);

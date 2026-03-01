@@ -147,31 +147,35 @@ void EoD::initUDP(Thread &thread)
 
 void EoD::handleUDP(Thread &thread)
 {
-    constexpr int BATCH = 64 * 4;
-    constexpr int BUF_SIZE = 1024 * 4;
+    constexpr int BATCH = 256;
+    constexpr int BUF_SIZE = 4096;
 
-    struct mmsghdr msgs[BATCH];
-    struct iovec iovecs[BATCH];
+    struct mmsghdr recv_msgs[BATCH];
+    struct iovec recv_iovecs[BATCH];
     struct sockaddr_in clients[BATCH];
-    uint8_t buffers[BATCH][BUF_SIZE];
+    uint8_t recv_buffers[BATCH][BUF_SIZE];
+
+    struct mmsghdr send_msgs[BATCH];
+    struct iovec send_iovecs[BATCH];
+    uint8_t send_buffers[BATCH][BUF_SIZE];
 
     for (int i = 0; i < BATCH; i++)
     {
-        iovecs[i].iov_base = buffers[i];
-        iovecs[i].iov_len = BUF_SIZE;
+        recv_iovecs[i].iov_base = recv_buffers[i];
+        recv_iovecs[i].iov_len = BUF_SIZE;
 
-        msgs[i].msg_hdr.msg_iov = &iovecs[i];
-        msgs[i].msg_hdr.msg_iovlen = 1;
-        msgs[i].msg_hdr.msg_name = &clients[i];
-        msgs[i].msg_hdr.msg_namelen = sizeof(sockaddr_in);
-        msgs[i].msg_hdr.msg_control = nullptr;
-        msgs[i].msg_hdr.msg_controllen = 0;
-        msgs[i].msg_hdr.msg_flags = 0;
+        recv_msgs[i].msg_hdr.msg_iov = &recv_iovecs[i];
+        recv_msgs[i].msg_hdr.msg_iovlen = 1;
+        recv_msgs[i].msg_hdr.msg_name = &clients[i];
+        recv_msgs[i].msg_hdr.msg_namelen = sizeof(sockaddr_in);
+        recv_msgs[i].msg_hdr.msg_control = nullptr;
+        recv_msgs[i].msg_hdr.msg_controllen = 0;
+        recv_msgs[i].msg_hdr.msg_flags = 0;
     }
 
     int received = recvmmsg(
         thread.eod_udp_fd,
-        msgs,
+        recv_msgs,
         BATCH,
         MSG_WAITFORONE,
         nullptr);
@@ -181,20 +185,32 @@ void EoD::handleUDP(Thread &thread)
 
     for (int i = 0; i < received; i++)
     {
+        int len = recv_msgs[i].msg_len;
 
-        int len = msgs[i].msg_len;
+        std::vector<uint8_t> resp =
+            handle(recv_buffers[i], false);
 
-        std::vector<uint8_t> response =
-            handle(buffers[i], false);
+        memcpy(send_buffers[i], resp.data(), resp.size());
 
-        sendto(
-            thread.eod_udp_fd,
-            response.data(),
-            response.size(),
-            0,
-            (sockaddr *)&clients[i],
-            msgs[i].msg_hdr.msg_namelen);
+        send_iovecs[i].iov_base = send_buffers[i];
+        send_iovecs[i].iov_len = resp.size();
+
+        send_msgs[i].msg_hdr.msg_iov = &send_iovecs[i];
+        send_msgs[i].msg_hdr.msg_iovlen = 1;
+        send_msgs[i].msg_hdr.msg_name = &clients[i];
+        send_msgs[i].msg_hdr.msg_namelen = sizeof(sockaddr_in);
+        send_msgs[i].msg_hdr.msg_control = nullptr;
+        send_msgs[i].msg_hdr.msg_controllen = 0;
+        send_msgs[i].msg_hdr.msg_flags = 0;
     }
+
+    int sent = sendmmsg(
+        thread.eod_udp_fd,
+        send_msgs,
+        received,
+        0);
+
+    (void)sent;
 }
 
 void EoD::initTCP(Thread &thread)
@@ -273,7 +289,7 @@ void EoD::handleTCP(Connection &conn, Thread &thread)
 
         conn.expectedLength = 0;
 
-        auto response = handle(dnsPacket.data(), false);
+        auto response = handle(dnsPacket.data(), true);
 
         uint16_t len = htons(response.size());
 
@@ -315,7 +331,19 @@ void EoD::writeTCP(Connection &conn, Thread &thread)
 
 std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
 {
-    size_t offset = is_tcp ? 2 : 0;
+    if (is_logging)
+    {
+        std::cout << (is_tcp ? "TCP " : "UDP ") << "Request" << std::endl;
+    }
+
+    bool truncated = false;
+
+    if (!is_tcp)
+    {
+        // truncated = true;
+    }
+
+    size_t offset = 0;
 
     auto read16 = [&](void)
     {
@@ -396,10 +424,22 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
     response_flags |= (flags & 0x0100); // RD mirror
     response_flags |= 0x0400;           // AA
 
+    if (truncated)
+    {
+        response_flags |= 0x0200; // TC (TCP) Truncated
+    }
+
     uint16_t anc = 0;
 
     if (qclass != 1)
+    {
         response_flags |= 0x0004; // NOTIMP
+    }
+
+    if (qtype != 1)
+    {
+        response_flags |= 0x0005; // NOTIMP
+    }
 
     write16(response, response_flags);
     write16(response, 1); // QDCOUNT
@@ -409,18 +449,18 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
 
     // copy question
     response.insert(response.end(),
-                    buffer + (is_tcp ? 14 : 12),
+                    buffer + (12),
                     buffer + question_end);
 
     // ---------------- ANSWER ----------------
-    if (qclass == 1)
+    if (qclass == 1 && !truncated)
     {
         if (!zoneWire.empty())
         {
             auto zoneIt = DNS::zones.find(zoneWire);
-            auto nameIt = zoneIt->second.find(nameWire);
+            auto nameIt = zoneIt->second.names.find(nameWire);
 
-            if (nameIt != zoneIt->second.end())
+            if (nameIt != zoneIt->second.names.end())
             {
                 for (auto &record : nameIt->second)
                 {
@@ -462,14 +502,6 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
 
     response[2] = (response_flags >> 8) & 0xFF;
     response[3] = response_flags & 0xFF;
-
-    // ---------------- TCP LENGTH PREFIX ----------------
-    if (is_tcp)
-    {
-        uint16_t len = response.size();
-        response.insert(response.begin(), len & 0xFF);
-        response.insert(response.begin(), (len >> 8) & 0xFF);
-    }
 
     return response;
 }

@@ -20,3 +20,5 @@ public:
     Main();
     ~Main();
 };
+
+static uint32_t next_zone_id = 1;
