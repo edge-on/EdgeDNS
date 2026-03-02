@@ -46,10 +46,9 @@ void EoD::worker(int th)
             }
             else if (events[i].data.fd == thread.eod_tcp_fd)
             {
-                sockaddr_in event{};
-
                 while (true)
                 {
+                    sockaddr_in event{};
                     socklen_t len = sizeof(event);
 
                     int client_fd = accept(thread.eod_tcp_fd, (sockaddr *)&event, &len);
@@ -71,6 +70,7 @@ void EoD::worker(int th)
 
                     Connection conn{};
                     conn.fd = client_fd;
+                    conn.ip = htons(event.sin_addr.s_addr);
 
                     thread.connections.emplace(client_fd, std::move(conn));
 
@@ -187,8 +187,10 @@ void EoD::handleUDP(Thread &thread)
     {
         int len = recv_msgs[i].msg_len;
 
+        uint32_t ip = ntohl(clients[i].sin_addr.s_addr);
+
         std::vector<uint8_t> resp =
-            handle(recv_buffers[i], false);
+            handle(recv_buffers[i], false, ip, thread);
 
         memcpy(send_buffers[i], resp.data(), resp.size());
 
@@ -289,7 +291,7 @@ void EoD::handleTCP(Connection &conn, Thread &thread)
 
         conn.expectedLength = 0;
 
-        auto response = handle(dnsPacket.data(), true);
+        auto response = handle(dnsPacket.data(), true, conn.ip, thread);
 
         uint16_t len = htons(response.size());
 
@@ -329,7 +331,7 @@ void EoD::writeTCP(Connection &conn, Thread &thread)
     disableWrite(conn.fd, thread.epoll_fd);
 }
 
-std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
+std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, Thread &thread)
 {
     if (is_logging)
     {
@@ -337,11 +339,6 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
     }
 
     bool truncated = false;
-
-    if (!is_tcp)
-    {
-        // truncated = true;
-    }
 
     size_t offset = 0;
 
@@ -424,11 +421,6 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
     response_flags |= (flags & 0x0100); // RD mirror
     response_flags |= 0x0400;           // AA
 
-    if (truncated)
-    {
-        response_flags |= 0x0200; // TC (TCP) Truncated
-    }
-
     uint16_t anc = 0;
 
     if (qclass != 1)
@@ -453,7 +445,7 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
                     buffer + question_end);
 
     // ---------------- ANSWER ----------------
-    if (qclass == 1 && !truncated)
+    if (qclass == 1)
     {
         if (!zoneWire.empty())
         {
@@ -467,17 +459,46 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
                     if (record.type != qtype)
                         continue;
 
-                    write16(response, 0xC00C); // pointer
-                    write16(response, record.type);
-                    write16(response, 1); // IN (rcode)
-                    write32(response, record.ttl);
-                    write16(response, record.rdata.size());
+                    DNS::RRLKey key;
+                    key.prefix = ip;
+                    key.rcode = 1;
 
-                    response.insert(response.end(),
-                                    record.rdata.begin(),
-                                    record.rdata.end());
+                    uint32_t zone;
+                    memcpy(&zone, zoneWire.data(), sizeof(uint32_t));
 
-                    anc++;
+                    uint32_t current = now();
+
+                    auto &bucket = thread.rrlBuckets[key];
+
+                    if (bucket.window_start != now())
+                    {
+                        bucket.window_start = now();
+                        bucket.responses = 1;
+                    }
+                    else
+                    {
+                        bucket.responses += 1;
+                    }
+
+                    if (bucket.responses > threshold)
+                    {
+                        truncated = true;
+                    }
+
+                    if (!truncated)
+                    {
+                        write16(response, 0xC00C); // pointer
+                        write16(response, record.type);
+                        write16(response, 1); // IN (rcode)
+                        write32(response, record.ttl);
+                        write16(response, record.rdata.size());
+
+                        response.insert(response.end(),
+                                        record.rdata.begin(),
+                                        record.rdata.end());
+
+                        anc++;
+                    }
                 }
 
                 if (anc == 0)
@@ -494,6 +515,11 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp)
         {
             response_flags |= 0x0005; // REFUSED
         }
+    }
+
+    if (truncated)
+    {
+        response_flags |= 0x0200; // TC (TCP) Truncated
     }
 
     // ---------------- FIX HEADER ----------------

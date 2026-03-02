@@ -17,6 +17,8 @@
 
 #include <unordered_map>
 
+#include <atomic>
+
 #include "DNS/DNS.hpp"
 
 class EoD
@@ -28,6 +30,8 @@ public:
     struct Connection
     {
         int fd;
+
+        uint32_t ip;
 
         std::vector<uint8_t> readBuffer;
         std::vector<uint8_t> writeBuffer;
@@ -42,6 +46,8 @@ public:
         int eod_tcp_fd;
 
         std::unordered_map<int, Connection> connections;
+
+        ankerl::unordered_dense::map<DNS::RRLKey, DNS::RRLBucket, DNS::RRLKeyHash> rrlBuckets;
     };
 
     std::unordered_map<int, Thread> activeThreads;
@@ -87,7 +93,12 @@ public:
     void enableWrite(int fd, int epoll_fd);
     void disableWrite(int fd, int epoll_fd);
 
-    std::vector<uint8_t> handle(uint8_t buffer[4096], bool is_tcp);
+    std::vector<uint8_t> handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, Thread &thread);
+
+    uint32_t now()
+    {
+        return g_second.load(std::memory_order_relaxed);
+    }
 
 private:
     int eod_port = 8902;
@@ -98,4 +109,8 @@ private:
 
     int threadCount = 1;
     std::vector<std::thread> threads;
+
+    std::atomic<uint32_t> g_second;
+
+    uint32_t threshold = 1;
 };
