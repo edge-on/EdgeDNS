@@ -12,6 +12,8 @@ void EoD::start()
 {
     threadCount = std::thread::hardware_concurrency();
 
+    start_clock_thread();
+
     for (int i = 0; i < threadCount; ++i)
     {
         threads.emplace_back(&EoD::worker, this, i);
@@ -459,30 +461,33 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                     if (record.type != qtype)
                         continue;
 
-                    DNS::RRLKey key;
-                    key.prefix = ip;
-                    key.rcode = 1;
-
-                    uint32_t zone;
-                    memcpy(&zone, zoneWire.data(), sizeof(uint32_t));
-
-                    uint32_t current = now();
-
-                    auto &bucket = thread.rrlBuckets[key];
-
-                    if (bucket.window_start != now())
+                    if (is_rrl)
                     {
-                        bucket.window_start = now();
-                        bucket.responses = 1;
-                    }
-                    else
-                    {
-                        bucket.responses += 1;
-                    }
+                        DNS::RRLKey key;
+                        key.prefix = ip;
+                        key.rcode = 1;
 
-                    if (bucket.responses > threshold)
-                    {
-                        truncated = true;
+                        uint32_t zone;
+                        memcpy(&zone, zoneWire.data(), sizeof(uint32_t));
+
+                        uint32_t current = now();
+
+                        auto &bucket = thread.rrlBuckets[key];
+
+                        if (bucket.window_start != now())
+                        {
+                            bucket.window_start = now();
+                            bucket.responses = 1;
+                        }
+                        else
+                        {
+                            bucket.responses += 1;
+                        }
+
+                        if (bucket.responses > threshold)
+                        {
+                            truncated = true;
+                        }
                     }
 
                     if (!truncated)

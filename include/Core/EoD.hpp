@@ -95,9 +95,25 @@ public:
 
     std::vector<uint8_t> handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, Thread &thread);
 
+    std::atomic<uint32_t> g_second;
+
     uint32_t now()
     {
         return g_second.load(std::memory_order_relaxed);
+    }
+
+    void start_clock_thread()
+    {
+        std::thread([&]
+                    {
+        while (true) {
+            timespec ts;
+            clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+            g_second.store(static_cast<uint32_t>(ts.tv_sec),
+                           std::memory_order_relaxed);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        } })
+            .detach();
     }
 
 private:
@@ -106,11 +122,10 @@ private:
     int max_event = 10;
 
     bool is_logging = false;
+    bool is_rrl = false;
 
     int threadCount = 1;
     std::vector<std::thread> threads;
 
-    std::atomic<uint32_t> g_second;
-
-    uint32_t threshold = 1;
+    uint32_t threshold = 200;
 };

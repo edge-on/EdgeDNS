@@ -58,7 +58,7 @@ public:
 
     struct RRLBucket
     {
-        uint32_t window_start;
+        uint32_t window_start = 0;
         uint32_t responses;
         uint32_t slip_counter = 2;
         uint32_t last_seen;
