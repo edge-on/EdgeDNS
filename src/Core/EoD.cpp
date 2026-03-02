@@ -414,6 +414,16 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
     }
 
     // ---------------- BUILD RESPONSE ----------------
+
+    /*
+    0 → NOERROR
+    1 → FORMERR
+    2 → SERVFAIL
+    3 → NXDOMAIN
+    4 → NOTIMP
+    5 → REFUSED
+    */
+
     std::vector<uint8_t> response;
 
     write16(response, transaction_id);
@@ -428,6 +438,11 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
     if (qclass != 1)
     {
         response_flags |= 0x0004; // NOTIMP
+    }
+
+    if (qdcount != 1)
+    {
+        response_flags |= 0x0001; // FORMER
     }
 
     if (qtype != 1)
@@ -447,7 +462,7 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                     buffer + question_end);
 
     // ---------------- ANSWER ----------------
-    if (qclass == 1)
+    if (qclass == 1 && qdcount == 1)
     {
         if (!zoneWire.empty())
         {
@@ -465,18 +480,20 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                     {
                         DNS::RRLKey key;
                         key.prefix = ip;
-                        key.rcode = 1;
+                        key.rcode = 0;
 
                         uint32_t zone;
                         memcpy(&zone, zoneWire.data(), sizeof(uint32_t));
+
+                        key.zone_id = zone;
 
                         uint32_t current = now();
 
                         auto &bucket = thread.rrlBuckets[key];
 
-                        if (bucket.window_start != now())
+                        if (bucket.window_start != current)
                         {
-                            bucket.window_start = now();
+                            bucket.window_start = current;
                             bucket.responses = 1;
                         }
                         else
@@ -494,7 +511,7 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                     {
                         write16(response, 0xC00C); // pointer
                         write16(response, record.type);
-                        write16(response, 1); // IN (rcode)
+                        write16(response, 1); // IN (qclass)
                         write32(response, record.ttl);
                         write16(response, record.rdata.size());
 
@@ -513,12 +530,18 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
             }
             else
             {
-                response_flags |= 0x0003; // NXDOMAIN
+                if (!truncated)
+                {
+                    response_flags |= 0x0003; // NXDOMAIN
+                }
             }
         }
         else
         {
-            response_flags |= 0x0005; // REFUSED
+            if (!truncated)
+            {
+                response_flags |= 0x0005; // REFUSED
+            }
         }
     }
 
