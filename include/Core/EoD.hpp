@@ -28,18 +28,11 @@ public:
     EoD();
     ~EoD();
 
-    enum ConnType {
-        TCP,
-        IPC
-    };
-
     struct Connection
     {
         int fd;
 
         uint32_t ip;
-
-        ConnType type;
 
         std::vector<uint8_t> readBuffer;
         std::vector<uint8_t> writeBuffer;
@@ -52,8 +45,6 @@ public:
 
         int eod_udp_fd;
         int eod_tcp_fd;
-
-        int eod_ipc_fd;
 
         std::unordered_map<int, Connection> connections;
 
@@ -100,7 +91,9 @@ public:
     void handleTCP(Connection &conn, Thread &th);
     void writeTCP(Connection &conn, Thread &th);
 
-    void initIPC(Thread &th);
+    void initIPC();
+    void handleIPC(int fd);
+    void writeIPC(int fd);
 
     void enableWrite(int fd, int epoll_fd);
     void disableWrite(int fd, int epoll_fd);
@@ -135,6 +128,8 @@ private:
 
     bool is_logging = false;
     bool is_rrl = false;
+
+    int eod_ipc_fd;
 
     int threadCount = 1;
     std::vector<std::thread> threads;

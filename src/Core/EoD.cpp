@@ -19,10 +19,14 @@ void EoD::start()
         threads.emplace_back(&EoD::worker, this, i);
     }
 
+    std::thread ipc_thread = std::thread(&EoD::initIPC, this);
+
     for (auto &t : threads)
     {
         t.join();
     }
+
+    ipc_thread.join();
 }
 
 void EoD::worker(int th)
@@ -74,8 +78,6 @@ void EoD::worker(int th)
                     conn.fd = client_fd;
                     conn.ip = htons(event.sin_addr.s_addr);
 
-                    conn.type = ConnType::TCP;
-
                     thread.connections.emplace(client_fd, std::move(conn));
 
                     epoll_event e{};
@@ -84,23 +86,6 @@ void EoD::worker(int th)
 
                     epoll_ctl(thread.epoll_fd, EPOLL_CTL_ADD, client_fd, &e);
                 }
-            }
-            else if (events[i].data.fd == thread.eod_ipc_fd)
-            {
-                int client_fd = accept(thread.eod_ipc_fd, nullptr, nullptr);
-
-                Connection conn;
-                conn.fd = client_fd;
-
-                conn.type = ConnType::IPC;
-
-                thread.connections.emplace(client_fd, std::move(conn));
-
-                epoll_event e{};
-                e.data.fd = client_fd;
-                e.events = EPOLLIN | EPOLLET;
-
-                epoll_ctl(thread.epoll_fd, EPOLL_CTL_ADD, client_fd, &e);
             }
             else
             {
@@ -112,19 +97,14 @@ void EoD::worker(int th)
 
                 Connection &conn = it->second;
 
-                if (conn.type == ConnType::TCP)
+                if (events[i].events & EPOLLIN)
                 {
-                    if (events[i].events & EPOLLIN)
-                    {
-                        handleTCP(conn, thread);
-                    }
+                    handleTCP(conn, thread);
+                }
 
-                    if (events[i].events & EPOLLOUT)
-                    {
-                        writeTCP(conn, thread);
-                    }
-                } else if (conn.type == ConnType::IPC) {
-
+                if (events[i].events & EPOLLOUT)
+                {
+                    writeTCP(conn, thread);
                 }
             }
         }
@@ -351,16 +331,57 @@ void EoD::writeTCP(Connection &conn, Thread &thread)
     disableWrite(conn.fd, thread.epoll_fd);
 }
 
-void EoD::initIPC(Thread &th)
+void EoD::initIPC()
 {
-    th.eod_ipc_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    eod_ipc_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+
+    if (eod_ipc_fd < 0)
+    {
+        perror("eod_ipc_fd socket");
+    }
+
+    makeNonBlocking(eod_ipc_fd);
 
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
     strcpy(addr.sun_path, "/run/eod.sock");
 
-    bind(th.eod_ipc_fd, (sockaddr *)&addr, sizeof(addr));
-    listen(th.eod_ipc_fd, 10);
+    if (bind(eod_ipc_fd, (sockaddr *)&addr, sizeof(addr)) < 0)
+    {
+        perror("eod_ipc_fd bind");
+    }
+
+    if (listen(eod_ipc_fd, 10) < 0)
+    {
+        perror("eod_ipc_fd listen");
+    }
+
+    while (true)
+    {
+        int client_fd = accept(eod_ipc_fd, nullptr, nullptr);
+        if (client_fd < 0)
+        {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                continue;
+            continue;
+        }
+
+        handleIPC(client_fd);
+        close(client_fd);
+    }
+}
+
+void EoD::handleIPC(int fd)
+{
+    char buffer[4096];
+
+    read(fd, buffer, sizeof(buffer));
+
+    std::cout << "BF: " << buffer << std::endl;
+}
+
+void EoD::writeIPC(int fd)
+{
 }
 
 std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, Thread &thread)
