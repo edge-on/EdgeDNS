@@ -346,12 +346,14 @@ void EoD::initIPC()
     addr.sun_family = AF_UNIX;
     strcpy(addr.sun_path, "/run/eod.sock");
 
+    unlink("/run/eod.sock");
+
     if (bind(eod_ipc_fd, (sockaddr *)&addr, sizeof(addr)) < 0)
     {
         perror("eod_ipc_fd bind");
     }
 
-    if (listen(eod_ipc_fd, 10) < 0)
+    if (listen(eod_ipc_fd, SOMAXCONN) < 0)
     {
         perror("eod_ipc_fd listen");
     }
@@ -363,6 +365,7 @@ void EoD::initIPC()
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
                 continue;
+            perror("accept");
             continue;
         }
 
