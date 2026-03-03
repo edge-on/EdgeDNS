@@ -2,6 +2,7 @@
 
 #include <sys/socket.h>
 #include <sys/epoll.h>
+#include <sys/un.h>
 
 #include <unistd.h>
 
@@ -27,11 +28,18 @@ public:
     EoD();
     ~EoD();
 
+    enum ConnType {
+        TCP,
+        IPC
+    };
+
     struct Connection
     {
         int fd;
 
         uint32_t ip;
+
+        ConnType type;
 
         std::vector<uint8_t> readBuffer;
         std::vector<uint8_t> writeBuffer;
@@ -44,6 +52,8 @@ public:
 
         int eod_udp_fd;
         int eod_tcp_fd;
+
+        int eod_ipc_fd;
 
         std::unordered_map<int, Connection> connections;
 
@@ -89,6 +99,8 @@ public:
     void initTCP(Thread &th);
     void handleTCP(Connection &conn, Thread &th);
     void writeTCP(Connection &conn, Thread &th);
+
+    void initIPC(Thread &th);
 
     void enableWrite(int fd, int epoll_fd);
     void disableWrite(int fd, int epoll_fd);
