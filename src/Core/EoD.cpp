@@ -389,8 +389,13 @@ void EoD::handleIPC(int fd)
         std::vector<uint8_t> response;
         response.push_back(IPC::Commands::DONE);
 
-        std::string zoneWire(buffer.begin() + offset, buffer.end());
-        DNS::reloadZone(zoneWire);
+        std::string zone = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
+        DNS::reloadZone(zone);
+
+        if (is_logging)
+        {
+            std::cout << "Zone " << zone << " Reloaded!" << std::endl;
+        }
 
         send(fd, response.data(), response.size(), 0);
     }

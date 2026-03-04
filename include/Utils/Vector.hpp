@@ -67,5 +67,23 @@ namespace Utils
 
             return wire;
         }
+
+        static std::string wireToDomain(const uint8_t *data, size_t len)
+        {
+            std::string result;
+            size_t i = 0;
+
+            while (i < len && data[i] != 0)
+            {
+                uint8_t labelLen = data[i++];
+                if (!result.empty())
+                    result += '.';
+
+                result.append(reinterpret_cast<const char *>(data + i), labelLen);
+                i += labelLen;
+            }
+
+            return result;
+        }
     };
 } // namespace Utils
