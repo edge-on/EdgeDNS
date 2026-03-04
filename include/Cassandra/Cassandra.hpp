@@ -13,13 +13,14 @@ public:
 
     bool connect();
 
-    const CassResult* execute(char *query);
+    const CassResult *execute(char *query);
 
-    std::string getValue(const CassValue* val);
+    std::string getValue(const CassValue *val);
+
+    CassFuture *connect_future = NULL;
+    CassCluster *cluster = cass_cluster_new();
+    CassSession *session = cass_session_new();
+
 private:
-    CassFuture* connect_future = NULL;
-    CassCluster* cluster = cass_cluster_new();
-    CassSession* session = cass_session_new();
-
     Dotenv *dotenv;
 };

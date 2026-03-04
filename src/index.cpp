@@ -1,12 +1,14 @@
 #include "index.hpp"
 
+Cassandra* Main::cas = nullptr;
+
 int main()
 {
-    Cassandra *cas = new Cassandra();
+    Main::cas = new Cassandra();
 
-    if (cas->connect())
+    if (Main::cas->connect())
     {
-        const CassResult *result = cas->execute("SELECT * FROM edgeon.records;");
+        const CassResult *result = Main::cas->execute("SELECT * FROM edgeon.records;");
         CassIterator *iterator = cass_iterator_from_result(result);
 
         while (cass_iterator_next(iterator))
@@ -42,18 +44,18 @@ int main()
 
             std::vector<uint8_t> rdata(rdataBytes, rdataBytes + rdataSize);
 
-            DNS::Record record;
+            Record record;
             record.type = static_cast<uint16_t>(type);
             record.ttl = static_cast<uint32_t>(ttl);
             record.rdata = std::move(rdata);
 
             std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone);
 
-            auto [it, inserted] = DNS::zones.try_emplace(zoneWire);
+            auto [it, inserted] = zones.try_emplace(zoneWire);
 
             if (inserted)
             {
-                it->second.id = next_zone_id++;
+                it->second.id = Main::next_zone_id++;
             }
 
             it->second.names[nameWire].push_back(std::move(record));

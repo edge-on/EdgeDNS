@@ -17,10 +17,15 @@
 #include <thread>
 
 #include <unordered_map>
+#include <ankerl/unordered_dense.h>
 
 #include <atomic>
 
 #include "DNS/DNS.hpp"
+#include "DNS/RRL.hpp"
+#include "DNS/Zone.hpp"
+
+#include "Core/IPC/IPC.hpp"
 
 class EoD
 {
@@ -48,7 +53,7 @@ public:
 
         std::unordered_map<int, Connection> connections;
 
-        ankerl::unordered_dense::map<DNS::RRLKey, DNS::RRLBucket, DNS::RRLKeyHash> rrlBuckets;
+        ankerl::unordered_dense::map<RRLKey, RRLBucket, RRLKeyHash> rrlBuckets;
     };
 
     std::unordered_map<int, Thread> activeThreads;

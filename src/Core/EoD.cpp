@@ -376,11 +376,26 @@ void EoD::initIPC()
 
 void EoD::handleIPC(int fd)
 {
-    char buffer[4096];
+    std::vector<uint8_t> buffer(1024);
 
-    read(fd, buffer, sizeof(buffer));
+    read(fd, buffer.data(), buffer.size());
 
-    std::cout << "BF: " << buffer << std::endl;
+    int offset = 0;
+    uint8_t code = buffer[offset];
+    offset++;
+
+    if (code == IPC::Commands::RELOAD)
+    {
+        std::vector<uint8_t> response;
+        response.push_back(IPC::Commands::DONE);
+
+        std::vector<uint8_t> zoneWire(buffer.begin() + offset, buffer.end());
+
+        auto zone_it = zones.find(zoneWire);
+        std::cout << zone_it->second.id << " reloaded" << std::endl;
+
+        send(fd, response.data(), response.size(), 0);
+    }
 }
 
 void EoD::writeIPC(int fd)
@@ -458,7 +473,7 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
         std::vector<uint8_t> candidate(nameWire.begin() + i,
                                        nameWire.end());
 
-        if (DNS::zones.find(candidate) != DNS::zones.end())
+        if (zones.find(candidate) != zones.end())
         {
             zoneWire = candidate;
             break;
@@ -520,7 +535,7 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
     {
         if (!zoneWire.empty())
         {
-            auto zoneIt = DNS::zones.find(zoneWire);
+            auto zoneIt = zones.find(zoneWire);
             auto nameIt = zoneIt->second.names.find(nameWire);
 
             if (nameIt != zoneIt->second.names.end())
@@ -532,7 +547,7 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
 
                     if (is_rrl)
                     {
-                        DNS::RRLKey key;
+                        RRLKey key;
                         key.prefix = ip;
                         key.rcode = 0;
 

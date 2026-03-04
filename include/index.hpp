@@ -1,3 +1,5 @@
+#pragma once
+
 #include <sys/socket.h>
 #include <sys/epoll.h>
 
@@ -10,15 +12,17 @@
 #include <vector>
 
 #include "Core/EoD.hpp"
+
 #include "DNS/DNS.hpp"
+#include "DNS/RRL.hpp"
+#include "DNS/Zone.hpp"
+
 #include "Cassandra/Cassandra.hpp"
 #include "Utils/Vector.hpp"
 
 class Main
 {
 public:
-    Main();
-    ~Main();
+    static Cassandra *cas;
+    static inline uint32_t next_zone_id = 1;
 };
-
-static uint32_t next_zone_id = 1;
