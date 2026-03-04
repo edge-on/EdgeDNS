@@ -389,17 +389,11 @@ void EoD::handleIPC(int fd)
         std::vector<uint8_t> response;
         response.push_back(IPC::Commands::DONE);
 
-        std::vector<uint8_t> zoneWire(buffer.begin() + offset, buffer.end());
-
-        auto zone_it = zones.find(zoneWire);
-        std::cout << zone_it->second.id << " reloaded" << std::endl;
+        std::string zoneWire(buffer.begin() + offset, buffer.end());
+        DNS::reloadZone(zoneWire);
 
         send(fd, response.data(), response.size(), 0);
     }
-}
-
-void EoD::writeIPC(int fd)
-{
 }
 
 std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, Thread &thread)
@@ -645,4 +639,50 @@ void EoD::disableWrite(int fd, int epoll_fd)
     ev.data.fd = fd;
 
     epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev);
+}
+
+int EoD::makeNonBlocking(int sfd)
+{
+    int flags = fcntl(sfd, F_GETFL, 0);
+    if (flags == -1)
+        return -1;
+    flags |= O_NONBLOCK;
+    return fcntl(sfd, F_SETFL, flags);
+}
+
+void EoD::write32(std::vector<uint8_t> &buf, uint32_t value)
+{
+    uint32_t net = htonl(value);
+    uint8_t *p = (uint8_t *)&net;
+    buf.push_back(p[0]);
+    buf.push_back(p[1]);
+    buf.push_back(p[2]);
+    buf.push_back(p[3]);
+}
+
+void EoD::write16(std::vector<uint8_t> &buf, uint16_t value)
+{
+    uint16_t net = htons(value);
+    uint8_t *p = (uint8_t *)&net;
+    buf.push_back(p[0]);
+    buf.push_back(p[1]);
+}
+
+uint32_t EoD::now()
+{
+    return g_second.load(std::memory_order_relaxed);
+}
+
+void EoD::start_clock_thread()
+{
+    std::thread([&]
+                {
+        while (true) {
+            timespec ts;
+            clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+            g_second.store(static_cast<uint32_t>(ts.tv_sec),
+                           std::memory_order_relaxed);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        } })
+        .detach();
 }
