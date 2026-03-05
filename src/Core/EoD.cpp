@@ -535,9 +535,9 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
         if (!zoneWire.empty())
         {
             auto zoneIt = zones.find(zoneWire);
-            auto nameIt = zoneIt->second.names.find(nameWire);
+            auto nameIt = zoneIt->second->names.find(nameWire);
 
-            if (nameIt != zoneIt->second.names.end())
+            if (nameIt != zoneIt->second->names.end())
             {
                 for (auto &record : nameIt->second)
                 {

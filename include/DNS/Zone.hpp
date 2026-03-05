@@ -33,7 +33,7 @@ struct Zone
 
 using ZoneMap = ankerl::unordered_dense::map<
     std::vector<uint8_t>,
-    Zone,
+    std::shared_ptr<Zone>,
     ByteVecHash>;
 
 extern ZoneMap zones;

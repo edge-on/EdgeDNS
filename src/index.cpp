@@ -1,6 +1,6 @@
 #include "index.hpp"
 
-Cassandra* Main::cas = nullptr;
+Cassandra *Main::cas = nullptr;
 
 int main()
 {
@@ -53,12 +53,13 @@ int main()
 
             auto [it, inserted] = zones.try_emplace(zoneWire);
 
-            if (inserted)
+            if (!it->second)
             {
-                it->second.id = Main::next_zone_id++;
+                it->second = std::make_shared<Zone>();
+                it->second->id = Main::next_zone_id++;
             }
 
-            it->second.names[nameWire].push_back(std::move(record));
+            it->second->names[nameWire].push_back(std::move(record));
         }
 
         cass_iterator_free(iterator);
