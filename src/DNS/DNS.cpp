@@ -5,6 +5,8 @@ void DNS::reloadZone(std::string zone)
     CassStatement *statement =
         cass_statement_new("SELECT * FROM edgeon.records WHERE zone = ?;", 1);
 
+    std::cout << "Zone: " << zone << std::endl;
+
     cass_statement_bind_string(statement, 0, zone.c_str());
 
     CassFuture *future =
@@ -14,6 +16,14 @@ void DNS::reloadZone(std::string zone)
 
     if (cass_future_error_code(future) == CASS_OK)
     {
+        std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone);
+        auto [it, inserted] = zones.try_emplace(std::move(zoneWire));
+
+        if (inserted)
+            it->second.id = Main::next_zone_id++;
+
+        it->second.names.clear();
+
         const CassResult *result = cass_future_get_result(future);
 
         CassIterator *iterator = cass_iterator_from_result(result);
@@ -27,6 +37,8 @@ void DNS::reloadZone(std::string zone)
             const CassValue *typeVal = cass_row_get_column_by_name(row, "type");
             const CassValue *ttlVal = cass_row_get_column_by_name(row, "ttl");
             const CassValue *valueVal = cass_row_get_column_by_name(row, "value");
+
+            std::cout << "A: " << nameVal << std::endl;
 
             const char *zoneStr;
             size_t zoneLen;
@@ -56,13 +68,6 @@ void DNS::reloadZone(std::string zone)
             record.type = static_cast<uint16_t>(type);
             record.ttl = static_cast<uint32_t>(ttl);
             record.rdata = std::move(rdata);
-
-            std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zoneName);
-
-            auto [it, inserted] = zones.try_emplace(std::move(zoneWire));
-
-            if (inserted)
-                it->second.id = Main::next_zone_id++;
 
             it->second.names[nameWire].push_back(std::move(record));
         }
