@@ -22,11 +22,30 @@ struct ByteVecHash
     }
 };
 
+struct UUIDKey
+{
+    uint64_t hi;
+    uint64_t lo;
+
+    bool operator==(const UUIDKey &other) const noexcept
+    {
+        return hi == other.hi && lo == other.lo;
+    }
+};
+
+struct UUIDHash
+{
+    size_t operator()(const UUIDKey &k) const noexcept
+    {
+        return k.hi ^ k.lo;
+    }
+};
+
 using NameMap = ankerl::unordered_dense::map<
     std::vector<uint8_t>,
-    std::vector<CassUuid>,
+    std::vector<UUIDKey>,
     ByteVecHash>;
-    
+
 struct Zone
 {
     uint32_t id;
@@ -40,8 +59,9 @@ using ZoneMap = ankerl::unordered_dense::map<
     ByteVecHash>;
 
 using Records = ankerl::unordered_dense::map<
-    CassUuid,
-    Record>;
-    
+    UUIDKey,
+    Record,
+    UUIDHash>;
+
 extern ZoneMap zones;
 extern Records records;

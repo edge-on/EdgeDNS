@@ -73,8 +73,10 @@ int main()
             CassUuid uuid;
             cass_value_get_uuid(idVal, &uuid);
 
-            records[uuid] = std::move(record);
-            it->second->names[nameWire].push_back(std::move(uuid));
+            UUIDKey key = DNS::uuidToKey(uuid);
+
+            records[key] = std::move(record);
+            it->second->names[nameWire].push_back(std::move(key));
         }
 
         cass_iterator_free(iterator);

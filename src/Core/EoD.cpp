@@ -539,8 +539,22 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
 
             if (nameIt != zoneIt->second->names.end())
             {
-                for (auto &record : nameIt->second)
+                auto &list = nameIt->second;
+
+                for (size_t i = 0; i < list.size();)
                 {
+                    auto r_it = records.find(list[i]);
+
+                    if (r_it == records.end())
+                    {
+                        list[i] = list.back();
+                        list.pop_back();
+                        continue;
+                    }
+
+                    Record &rec = r_it->second;
+                    UUIDKey record = list[i];
+                    
                     if (records[record].type != qtype)
                         continue;
 
@@ -589,6 +603,8 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
 
                         anc++;
                     }
+
+                    i++;
                 }
 
                 if (anc == 0)
