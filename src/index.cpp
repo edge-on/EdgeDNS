@@ -21,6 +21,11 @@ int main()
             const CassValue *ttlVal = cass_row_get_column_by_name(row, "ttl");
             const CassValue *valueVal = cass_row_get_column_by_name(row, "value");
 
+            const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
+
+            cass_int32_t version;
+            cass_value_get_int32(versionVal, &version);
+
             const char *zoneStr;
             size_t zoneLen;
             cass_value_get_string(zoneVal, &zoneStr, &zoneLen);
@@ -57,6 +62,11 @@ int main()
             {
                 it->second = std::make_shared<Zone>();
                 it->second->id = Main::next_zone_id++;
+
+                if (it->second->version < version)
+                {
+                    it->second->version = version;
+                }
             }
 
             it->second->names[nameWire].push_back(std::move(record));

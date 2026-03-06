@@ -29,6 +29,7 @@ struct Zone
 {
     uint32_t id;
     NameMap names;
+    uint32_t version;
 };
 
 using ZoneMap = ankerl::unordered_dense::map<

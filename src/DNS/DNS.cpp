@@ -33,6 +33,16 @@ void DNS::reloadZone(std::string zone)
             const CassValue *ttlVal = cass_row_get_column_by_name(row, "ttl");
             const CassValue *valueVal = cass_row_get_column_by_name(row, "value");
 
+            const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
+
+            cass_int32_t version;
+            cass_value_get_int32(versionVal, &version);
+
+            if (new_zone->version < version)
+            {
+                new_zone->version = version;
+            }
+
             const char *zoneStr;
             size_t zoneLen;
             cass_value_get_string(zoneVal, &zoneStr, &zoneLen);
@@ -67,6 +77,88 @@ void DNS::reloadZone(std::string zone)
 
         std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone);
         zones[zoneWire] = new_zone;
+
+        cass_iterator_free(iterator);
+        cass_result_free(result);
+    }
+
+    cass_future_free(future);
+    cass_statement_free(statement);
+}
+
+void DNS::incrementalReloadZone(std::string zone)
+{
+    CassStatement *statement =
+        cass_statement_new("SELECT * FROM edgeon.records WHERE zone = ?;", 1);
+
+    std::cout << "Zone: " << zone << std::endl;
+
+    cass_statement_bind_string(statement, 0, zone.c_str());
+
+    CassFuture *future =
+        cass_session_execute(Main::cas->session, statement);
+
+    cass_future_wait(future);
+
+    if (cass_future_error_code(future) == CASS_OK)
+    {
+        const CassResult *result = cass_future_get_result(future);
+
+        CassIterator *iterator = cass_iterator_from_result(result);
+
+        std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone);
+
+        while (cass_iterator_next(iterator))
+        {
+            const CassRow *row = cass_iterator_get_row(iterator);
+
+            const CassValue *zoneVal = cass_row_get_column_by_name(row, "zone");
+            const CassValue *nameVal = cass_row_get_column_by_name(row, "name");
+            const CassValue *typeVal = cass_row_get_column_by_name(row, "type");
+            const CassValue *ttlVal = cass_row_get_column_by_name(row, "ttl");
+            const CassValue *valueVal = cass_row_get_column_by_name(row, "value");
+
+            const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
+
+            cass_int32_t version;
+            cass_value_get_int32(versionVal, &version);
+
+            if (zones[zoneWire]->version < version)
+            {
+                zones[zoneWire]->version = version;
+            }
+
+            const char *zoneStr;
+            size_t zoneLen;
+            cass_value_get_string(zoneVal, &zoneStr, &zoneLen);
+
+            std::string zoneName(zoneStr, zoneLen);
+
+            const cass_byte_t *nameBytes;
+            size_t nameSize;
+            cass_value_get_bytes(nameVal, &nameBytes, &nameSize);
+
+            std::vector<uint8_t> nameWire(nameBytes, nameBytes + nameSize);
+
+            cass_int16_t type;
+            cass_value_get_int16(typeVal, &type);
+
+            cass_int32_t ttl;
+            cass_value_get_int32(ttlVal, &ttl);
+
+            const cass_byte_t *rdataBytes;
+            size_t rdataSize;
+            cass_value_get_bytes(valueVal, &rdataBytes, &rdataSize);
+
+            std::vector<uint8_t> rdata(rdataBytes, rdataBytes + rdataSize);
+
+            Record record;
+            record.type = static_cast<uint16_t>(type);
+            record.ttl = static_cast<uint32_t>(ttl);
+            record.rdata = std::move(rdata);
+
+            zones[zoneWire]->names[nameWire].push_back(std::move(record));
+        }
 
         cass_iterator_free(iterator);
         cass_result_free(result);

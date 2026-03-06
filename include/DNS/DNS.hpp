@@ -13,4 +13,5 @@ class DNS
 {
 public:
     static void reloadZone(std::string domain);
+    static void incrementalReloadZone(std::string domain);
 };

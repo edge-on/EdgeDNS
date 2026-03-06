@@ -541,8 +541,6 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
             {
                 for (auto &record : nameIt->second)
                 {
-                    std::cout << record.type << std::endl;
-
                     if (record.type != qtype)
                         continue;
 
