@@ -399,6 +399,24 @@ void EoD::handleIPC(int fd)
 
         send(fd, response.data(), response.size(), 0);
     }
+    else if (code == IPC::Commands::INCREMENTAL)
+    {
+        std::vector<uint8_t> response;
+        response.push_back(IPC::Commands::DONE);
+
+        std::string zone = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
+
+        std::cout << "Version: " << (zones[Utils::Vector::stringToWire(zone)]->version).time_and_version << std::endl;
+
+        DNS::incrementalReloadZone(zone, zones[Utils::Vector::stringToWire(zone)]->version);
+
+        if (is_logging)
+        {
+            std::cout << "Zone " << zone << " Incremental Reloaded!" << std::endl;
+        }
+
+        send(fd, response.data(), response.size(), 0);
+    }
 }
 
 std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, Thread &thread)
@@ -554,7 +572,7 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
 
                     Record &rec = r_it->second;
                     UUIDKey record = list[i];
-                    
+
                     if (records[record].type != qtype)
                         continue;
 

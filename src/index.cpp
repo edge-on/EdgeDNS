@@ -24,8 +24,8 @@ int main()
 
             const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
 
-            cass_int32_t version;
-            cass_value_get_int32(versionVal, &version);
+            CassUuid version;
+            cass_value_get_uuid(versionVal, &version);
 
             const char *zoneStr;
             size_t zoneLen;
@@ -64,7 +64,8 @@ int main()
                 it->second = std::make_shared<Zone>();
                 it->second->id = Main::next_zone_id++;
 
-                if (it->second->version < version)
+                // HERE IS PROBLEMATIC - NEED FIX
+                if (cass_uuid_timestamp(it->second->version) < cass_uuid_timestamp(version))
                 {
                     it->second->version = version;
                 }

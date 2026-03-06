@@ -34,10 +34,10 @@ void DNS::reloadZone(std::string zone)
 
             const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
 
-            cass_int32_t version;
-            cass_value_get_int32(versionVal, &version);
+            CassUuid version;
+            cass_value_get_uuid(versionVal, &version);
 
-            if (new_zone->version < version)
+            if (cass_uuid_timestamp(new_zone->version) < cass_uuid_timestamp(version))
             {
                 new_zone->version = version;
             }
@@ -91,12 +91,13 @@ void DNS::reloadZone(std::string zone)
     cass_statement_free(statement);
 }
 
-void DNS::incrementalReloadZone(std::string zone)
+void DNS::incrementalReloadZone(std::string zone, CassUuid version)
 {
     CassStatement *statement =
-        cass_statement_new("SELECT * FROM edgeon.versions WHERE version > ?;", 1);
+        cass_statement_new("SELECT * FROM edgeon.versions WHERE zone = ? AND version > ?;", 2);
 
     cass_statement_bind_string(statement, 0, zone.c_str());
+    cass_statement_bind_uuid(statement, 1, version);
 
     CassFuture *future =
         cass_session_execute(Main::cas->session, statement);
@@ -189,10 +190,10 @@ void DNS::handleIncrementalZone(std::string zn, CassUuid version, CassUuid recor
 
                 const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
 
-                cass_int32_t version;
-                cass_value_get_int32(versionVal, &version);
+                CassUuid version;
+                cass_value_get_uuid(versionVal, &version);
 
-                if (new_zone->version < version)
+                if (cass_uuid_timestamp(new_zone->version) < cass_uuid_timestamp(version))
                 {
                     new_zone->version = version;
                 }

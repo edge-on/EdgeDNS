@@ -21,7 +21,7 @@ public:
     static void reloadZone(std::string domain);
 
     // Incremental Reload
-    static void incrementalReloadZone(std::string domain);
+    static void incrementalReloadZone(std::string zone, CassUuid version);
 
 private:
     static void handleIncrementalZone(std::string zoneName, CassUuid version, CassUuid record_id, int action);
