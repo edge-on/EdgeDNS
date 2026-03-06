@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cassandra.h>
+
 #include <ankerl/unordered_dense.h>
 
 struct Record
@@ -22,9 +24,9 @@ struct ByteVecHash
 
 using NameMap = ankerl::unordered_dense::map<
     std::vector<uint8_t>,
-    std::vector<Record>,
+    std::vector<CassUuid>,
     ByteVecHash>;
-
+    
 struct Zone
 {
     uint32_t id;
@@ -37,4 +39,9 @@ using ZoneMap = ankerl::unordered_dense::map<
     std::shared_ptr<Zone>,
     ByteVecHash>;
 
+using Records = ankerl::unordered_dense::map<
+    CassUuid,
+    Record>;
+    
 extern ZoneMap zones;
+extern Records records;

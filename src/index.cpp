@@ -15,6 +15,7 @@ int main()
         {
             const CassRow *row = cass_iterator_get_row(iterator);
 
+            const CassValue *idVal = cass_row_get_column_by_name(row, "id");
             const CassValue *zoneVal = cass_row_get_column_by_name(row, "zone");
             const CassValue *nameVal = cass_row_get_column_by_name(row, "name");
             const CassValue *typeVal = cass_row_get_column_by_name(row, "type");
@@ -69,7 +70,11 @@ int main()
                 }
             }
 
-            it->second->names[nameWire].push_back(std::move(record));
+            CassUuid uuid;
+            cass_value_get_uuid(idVal, &uuid);
+
+            records[uuid] = std::move(record);
+            it->second->names[nameWire].push_back(std::move(uuid));
         }
 
         cass_iterator_free(iterator);

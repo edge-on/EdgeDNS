@@ -541,7 +541,7 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
             {
                 for (auto &record : nameIt->second)
                 {
-                    if (record.type != qtype)
+                    if (records[record].type != qtype)
                         continue;
 
                     if (is_rrl)
@@ -578,14 +578,14 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                     if (!truncated)
                     {
                         write16(response, 0xC00C); // pointer
-                        write16(response, record.type);
+                        write16(response, records[record].type);
                         write16(response, 1); // IN (qclass)
-                        write32(response, record.ttl);
-                        write16(response, record.rdata.size());
+                        write32(response, records[record].ttl);
+                        write16(response, records[record].rdata.size());
 
                         response.insert(response.end(),
-                                        record.rdata.begin(),
-                                        record.rdata.end());
+                                        records[record].rdata.begin(),
+                                        records[record].rdata.end());
 
                         anc++;
                     }
