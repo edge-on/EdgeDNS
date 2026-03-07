@@ -514,10 +514,10 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
         response_flags |= 0x0001; // FORMERR
 
     write16(response, response_flags);
-    write16(response, qdcount);        // QDCOUNT
-    write16(response, 0);              // ANCOUNT (Placeholder)
-    write16(response, 0);              // NSCOUNT
-    write16(response, 0);              // ARCOUNT
+    write16(response, qdcount); // QDCOUNT
+    write16(response, 0);       // ANCOUNT (Placeholder)
+    write16(response, 0);       // NSCOUNT
+    write16(response, 0);       // ARCOUNT
 
     response.insert(response.end(), buffer + 12, buffer + question_end);
 
@@ -585,6 +585,32 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
 
                         write16(response, (uint16_t)wireName.size());
                         response.insert(response.end(), wireName.begin(), wireName.end());
+                    }
+                    else if (rec.type == 6)
+                    {
+                        std::string soaLine(rec.rdata.begin(), rec.rdata.end());
+                        std::stringstream ss(soaLine);
+                        std::string mname, rname;
+                        uint32_t serial, refresh, retry, expire, minimum;
+
+                        if (ss >> mname >> rname >> serial >> refresh >> retry >> expire >> minimum)
+                        {
+                            std::vector<uint8_t> mnameWire = Utils::Vector::stringToWire(mname);
+                            std::vector<uint8_t> rnameWire = Utils::Vector::stringToWire(rname);
+
+                            uint16_t rdlength = (uint16_t)(mnameWire.size() + rnameWire.size() + 20);
+                            write16(response, rdlength);
+
+                            response.insert(response.end(), mnameWire.begin(), mnameWire.end());
+
+                            response.insert(response.end(), rnameWire.begin(), rnameWire.end());
+
+                            write32(response, serial);
+                            write32(response, refresh);
+                            write32(response, retry);
+                            write32(response, expire);
+                            write32(response, minimum);
+                        }
                     }
                     else
                     {
