@@ -439,14 +439,13 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
 {
     if (is_logging)
     {
-        std::cout << (is_tcp ? "TCP " : "UDP ") << "Request" << std::endl;
+        std::cout << (is_tcp ? "TCP " : "UDP ") << "Request from " << ip << std::endl;
     }
 
     bool truncated = false;
-
     size_t offset = 0;
 
-    auto read16 = [&](void)
+    auto read16 = [&]()
     {
         uint16_t v = (buffer[offset] << 8) | buffer[offset + 1];
         offset += 2;
@@ -467,208 +466,149 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
         out.push_back(v & 0xFF);
     };
 
-    // ---------------- HEADER ----------------
+    if (offset + 12 > 4096)
+        return {};
     uint16_t transaction_id = read16();
     uint16_t flags = read16();
     uint16_t qdcount = read16();
-    read16(); // ancount
-    read16(); // nscount
-    read16(); // arcount
-
-    // ---------------- READ QNAME ----------------
-    std::vector<uint8_t> nameWire;
+    offset += 6;
 
     size_t name_start = offset;
-
-    while (buffer[offset] != 0)
+    while (offset < 4096 && buffer[offset] != 0)
     {
-        uint8_t len = buffer[offset++];
-        offset += len;
+        uint8_t len = buffer[offset];
+        if (offset + len + 1 >= 4096)
+            break;
+        offset += len + 1;
     }
+    offset++; // null terminator
 
-    offset++; // root
-
-    nameWire.insert(nameWire.end(),
-                    buffer + name_start,
-                    buffer + offset);
-
+    std::vector<uint8_t> nameWire(buffer + name_start, buffer + offset);
     uint16_t qtype = read16();
     uint16_t qclass = read16();
-
     size_t question_end = offset;
 
-    // ---------------- FIND ZONE (Longest suffix) ----------------
     std::vector<uint8_t> zoneWire;
-
-    size_t i = 0;
-    while (i < nameWire.size() && nameWire[i] != 0)
+    size_t label_ptr = 0;
+    while (label_ptr < nameWire.size() && nameWire[label_ptr] != 0)
     {
-        std::vector<uint8_t> candidate(nameWire.begin() + i,
-                                       nameWire.end());
-
+        std::vector<uint8_t> candidate(nameWire.begin() + label_ptr, nameWire.end());
         if (zones.find(candidate) != zones.end())
         {
             zoneWire = candidate;
             break;
         }
-
-        i += nameWire[i] + 1;
+        label_ptr += nameWire[label_ptr] + 1;
     }
-
-    // ---------------- BUILD RESPONSE ----------------
-
-    /*
-    0 → NOERROR
-    1 → FORMERR
-    2 → SERVFAIL
-    3 → NXDOMAIN
-    4 → NOTIMP
-    5 → REFUSED
-    */
 
     std::vector<uint8_t> response;
-
     write16(response, transaction_id);
 
-    uint16_t response_flags = 0;
-    response_flags |= 0x8000;           // QR
+    uint16_t response_flags = 0x8000;   // QR (Response)
     response_flags |= (flags & 0x0100); // RD mirror
-    response_flags |= 0x0400;           // AA
-
-    uint16_t anc = 0;
+    response_flags |= 0x0400;           // AA (Authoritative)
 
     if (qclass != 1)
-    {
         response_flags |= 0x0004; // NOTIMP
-    }
-
     if (qdcount != 1)
-    {
-        response_flags |= 0x0001; // FORMER
-    }
-
-    if (qtype != 1)
-    {
-        response_flags |= 0x0005; // NOTIMP
-    }
+        response_flags |= 0x0001; // FORMERR
 
     write16(response, response_flags);
-    write16(response, 1); // QDCOUNT
-    write16(response, 0); // ANCOUNT placeholder
-    write16(response, 0); // NSCOUNT
-    write16(response, 0); // ARCOUNT
+    write16(response, qdcount);        // QDCOUNT
+    write16(response, 0);              // ANCOUNT (Placeholder)
+    write16(response, 0);              // NSCOUNT
+    write16(response, 0);              // ARCOUNT
 
-    // copy question
-    response.insert(response.end(),
-                    buffer + (12),
-                    buffer + question_end);
+    response.insert(response.end(), buffer + 12, buffer + question_end);
 
-    // ---------------- ANSWER ----------------
-    if (qclass == 1 && qdcount == 1)
+    uint16_t anc = 0;
+    if (qclass == 1 && qdcount == 1 && !zoneWire.empty())
     {
-        if (!zoneWire.empty())
+        auto zoneIt = zones.find(zoneWire);
+        auto nameIt = (zoneIt != zones.end()) ? zoneIt->second->names.find(nameWire) : zoneIt->second->names.end();
+
+        if (nameIt != zoneIt->second->names.end())
         {
-            auto zoneIt = zones.find(zoneWire);
-            auto nameIt = zoneIt->second->names.find(nameWire);
-
-            if (nameIt != zoneIt->second->names.end())
+            auto &list = nameIt->second;
+            for (size_t i = 0; i < list.size();)
             {
-                auto &list = nameIt->second;
-
-                for (size_t i = 0; i < list.size();)
+                auto r_it = records.find(list[i]);
+                if (r_it == records.end())
                 {
-                    auto r_it = records.find(list[i]);
+                    list[i] = list.back();
+                    list.pop_back();
+                    continue;
+                }
 
-                    if (r_it == records.end())
-                    {
-                        list[i] = list.back();
-                        list.pop_back();
-                        continue;
-                    }
+                Record &rec = r_it->second;
 
-                    Record &rec = r_it->second;
-                    UUIDKey record = list[i];
-
-                    if (records[record].type != qtype)
-                        continue;
-
-                    if (is_rrl)
-                    {
-                        RRLKey key;
-                        key.prefix = ip;
-                        key.rcode = 0;
-
-                        uint32_t zone;
-                        memcpy(&zone, zoneWire.data(), sizeof(uint32_t));
-
-                        key.zone_id = zone;
-
-                        uint32_t current = now();
-
-                        auto &bucket = thread.rrlBuckets[key];
-
-                        if (bucket.window_start != current)
-                        {
-                            bucket.window_start = current;
-                            bucket.responses = 1;
-                        }
-                        else
-                        {
-                            bucket.responses += 1;
-                        }
-
-                        if (bucket.responses > threshold)
-                        {
-                            truncated = true;
-                        }
-                    }
-
-                    if (!truncated)
-                    {
-                        write16(response, 0xC00C); // pointer
-                        write16(response, records[record].type);
-                        write16(response, 1); // IN (qclass)
-                        write32(response, records[record].ttl);
-                        write16(response, records[record].rdata.size());
-
-                        response.insert(response.end(),
-                                        records[record].rdata.begin(),
-                                        records[record].rdata.end());
-
-                        anc++;
-                    }
-
+                if (rec.type != qtype && qtype != 255)
+                {
                     i++;
+                    continue;
                 }
 
-                if (anc == 0)
+                if (is_rrl)
                 {
-                    // NOERROR, empty answer
+                    RRLKey key = {ip, 0, 0};
+                    if (zoneWire.size() >= 4)
+                        memcpy(&key.zone_id, zoneWire.data(), 4);
+
+                    uint32_t current = now();
+                    auto &bucket = thread.rrlBuckets[key];
+
+                    if (bucket.window_start != current)
+                    {
+                        bucket.window_start = current;
+                        bucket.responses = 1;
+                    }
+                    else
+                    {
+                        bucket.responses++;
+                    }
+
+                    if (bucket.responses > threshold)
+                        truncated = true;
                 }
-            }
-            else
-            {
+
                 if (!truncated)
                 {
-                    response_flags |= 0x0003; // NXDOMAIN
+                    write16(response, 0xC00C);
+                    write16(response, rec.type);
+                    write16(response, 1);
+                    write32(response, rec.ttl);
+
+                    if (rec.type == 2 || rec.type == 5)
+                    {
+                        std::string targetName(rec.rdata.begin(), rec.rdata.end());
+                        std::vector<uint8_t> wireName = Utils::Vector::stringToWire(targetName);
+
+                        write16(response, (uint16_t)wireName.size());
+                        response.insert(response.end(), wireName.begin(), wireName.end());
+                    }
+                    else
+                    {
+                        write16(response, (uint16_t)rec.rdata.size());
+                        response.insert(response.end(), rec.rdata.begin(), rec.rdata.end());
+                    }
+                    anc++;
                 }
+                i++;
             }
         }
         else
         {
-            if (!truncated)
-            {
-                response_flags |= 0x0005; // REFUSED
-            }
+            response_flags |= 0x0003; // NXDOMAIN
         }
+    }
+    else if (zoneWire.empty() && qdcount == 1)
+    {
+        response_flags |= 0x0005; // REFUSED
     }
 
     if (truncated)
-    {
-        response_flags |= 0x0200; // TC (TCP) Truncated
-    }
+        response_flags |= 0x0200; // TC (Truncated) bit
 
-    // ---------------- FIX HEADER ----------------
     response[6] = (anc >> 8) & 0xFF;
     response[7] = anc & 0xFF;
 
