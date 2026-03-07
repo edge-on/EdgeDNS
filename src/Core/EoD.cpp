@@ -420,11 +420,16 @@ void EoD::handleIPC(int fd)
         }
         else
         {
+            CassUuid uuid;
+            cass_uuid_from_string("00000000-0000-1000-8080-808080808080", &uuid);
+
+            int reloadedCount = DNS::incrementalReloadZone(zone, uuid);
+
             if (is_logging)
             {
                 std::cout << 0 << " records reloaded in " << zone << "!" << std::endl;
             }
-            
+
             send(fd, response.data(), response.size(), 0);
         }
     }

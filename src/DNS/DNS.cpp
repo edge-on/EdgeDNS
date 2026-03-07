@@ -131,8 +131,8 @@ int DNS::incrementalReloadZone(std::string zone, CassUuid version)
             std::string zoneName(zoneStr, zoneLen);
 
             /* ----- VERSION ----- */
-            CassUuid version;
-            cass_value_get_uuid(versionVal, &version);
+            CassUuid v;
+            cass_value_get_uuid(versionVal, &v);
 
             /* ----- RECORD ----- */
             CassUuid record_id;
@@ -142,7 +142,7 @@ int DNS::incrementalReloadZone(std::string zone, CassUuid version)
             cass_int16_t action;
             cass_value_get_int16(actionVal, &action);
 
-            handleIncrementalZone(zoneWire, version, record_id, action);
+            handleIncrementalZone(zoneWire, v, record_id, action);
 
             count++;
         }
@@ -154,7 +154,7 @@ int DNS::incrementalReloadZone(std::string zone, CassUuid version)
     cass_future_free(future);
     cass_statement_free(statement);
 
-    count = count + handleIncrementalReloadZone(zoneWire, zones[zoneWire]->version);
+    count = count + handleIncrementalReloadZone(zoneWire, version);
 
     return count;
 }
@@ -163,17 +163,21 @@ void DNS::handleIncrementalZone(std::vector<uint8_t> zoneWire, CassUuid version,
 {
     if (action == 1)
     {
-        if (zones[zoneWire]->version.time_and_version < version.time_and_version)
+        auto z_it = zones.find(zoneWire);
+        if (z_it != zones.end())
         {
-            zones[zoneWire]->version = version;
-        }
+            if (z_it->second->version.time_and_version < version.time_and_version)
+            {
+                z_it->second->version = version;
+            }
 
-        UUIDKey key = DNS::uuidToKey(record_id);
+            UUIDKey key = DNS::uuidToKey(record_id);
 
-        auto it = records.find(key);
-        if (it != records.end())
-        {
-            records.erase(it);
+            auto it = records.find(key);
+            if (it != records.end())
+            {
+                records.erase(it);
+            }
         }
     }
 }
@@ -185,13 +189,17 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
     CassStatement *statement =
         cass_statement_new("SELECT * FROM edgeon.records WHERE zone = ? AND version > ?;", 2);
 
-    cass_statement_bind_string(statement, 0, Utils::Vector::wireToDomain(zoneWire.data(), zoneWire.size()).c_str());
+    std::string zoneName = Utils::Vector::wireToDomain(zoneWire.data(), zoneWire.size());
+
+    cass_statement_bind_string(statement, 0, zoneName.c_str());
     cass_statement_bind_uuid(statement, 1, version);
 
     CassFuture *future =
         cass_session_execute(Main::cas->session, statement);
 
     cass_future_wait(future);
+
+    auto new_zone = std::make_shared<Zone>();
 
     if (cass_future_error_code(future) == CASS_OK)
     {
@@ -212,14 +220,24 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
 
             const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
 
-            CassUuid version;
-            cass_value_get_uuid(versionVal, &version);
+            CassUuid v;
+            cass_value_get_uuid(versionVal, &v);
 
-            if (zones[zoneWire]->version.time_and_version < version.time_and_version)
+            auto it = zones.find(zoneWire);
+            if (it == zones.end())
+            {
+                CassUuid uuid;
+                cass_uuid_from_string("00000000-0000-1000-8080-808080808080", &uuid);
+
+                zones[zoneWire] = std::make_shared<Zone>();
+                zones[zoneWire]->id = Main::next_zone_id++;
+
+                zones[zoneWire]->version = uuid;
+            }
+
+            if (zones[zoneWire]->version.time_and_version < v.time_and_version)
             {
                 zones[zoneWire]->version = version;
-
-                std::cout << "Here worked" << std::endl;
             }
 
             const char *zoneStr;
