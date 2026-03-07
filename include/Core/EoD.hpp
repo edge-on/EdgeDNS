@@ -19,6 +19,8 @@
 #include <unordered_map>
 #include <ankerl/unordered_dense.h>
 
+#include <set>
+
 #include <atomic>
 
 #include "DNS/DNS.hpp"
