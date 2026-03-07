@@ -406,16 +406,27 @@ void EoD::handleIPC(int fd)
 
         std::string zone = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
 
-        std::cout << "Version: " << (zones[Utils::Vector::stringToWire(zone)]->version).time_and_version << std::endl;
-
-        DNS::incrementalReloadZone(zone, zones[Utils::Vector::stringToWire(zone)]->version);
-
-        if (is_logging)
+        auto it = zones.find(Utils::Vector::stringToWire(zone));
+        if (it != zones.end())
         {
-            std::cout << "Zone " << zone << " Incremental Reloaded!" << std::endl;
-        }
+            int reloadedCount = DNS::incrementalReloadZone(zone, it->second->version);
 
-        send(fd, response.data(), response.size(), 0);
+            if (is_logging)
+            {
+                std::cout << reloadedCount << " records reloaded in " << zone << "!" << std::endl;
+            }
+
+            send(fd, response.data(), response.size(), 0);
+        }
+        else
+        {
+            if (is_logging)
+            {
+                std::cout << 0 << " records reloaded in " << zone << "!" << std::endl;
+            }
+            
+            send(fd, response.data(), response.size(), 0);
+        }
     }
 }
 

@@ -64,8 +64,7 @@ int main()
                 it->second = std::make_shared<Zone>();
                 it->second->id = Main::next_zone_id++;
 
-                // HERE IS PROBLEMATIC - NEED FIX
-                if (cass_uuid_timestamp(it->second->version) < cass_uuid_timestamp(version))
+                if (it->second->version.time_and_version < version.time_and_version)
                 {
                     it->second->version = version;
                 }
