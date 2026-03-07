@@ -92,7 +92,7 @@ private:
     int max_event = 10;
 
     bool is_logging = false;
-    bool is_rrl = false;
+    bool is_rrl = true;
 
     int eod_ipc_fd;
 
