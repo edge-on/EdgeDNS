@@ -48,11 +48,11 @@ void DNS::reloadZone(std::string zone)
 
             std::string zoneName(zoneStr, zoneLen);
 
-            const cass_byte_t *nameBytes;
+            const char *name;
             size_t nameSize;
-            cass_value_get_bytes(nameVal, &nameBytes, &nameSize);
+            cass_value_get_string(nameVal, &name, &nameSize);
 
-            std::vector<uint8_t> nameWire(nameBytes, nameBytes + nameSize);
+            std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(name);
 
             cass_int16_t type;
             cass_value_get_int16(typeVal, &type);
@@ -60,16 +60,16 @@ void DNS::reloadZone(std::string zone)
             cass_int32_t ttl;
             cass_value_get_int32(ttlVal, &ttl);
 
-            const cass_byte_t *rdataBytes;
+            const char *rdata;
             size_t rdataSize;
-            cass_value_get_bytes(valueVal, &rdataBytes, &rdataSize);
+            cass_value_get_string(valueVal, &rdata, &rdataSize);
 
-            std::vector<uint8_t> rdata(rdataBytes, rdataBytes + rdataSize);
+            std::vector<uint8_t> rdataWire = Utils::Vector::stringToWire(rdata);
 
             Record record;
             record.type = static_cast<uint16_t>(type);
             record.ttl = static_cast<uint32_t>(ttl);
-            record.rdata = std::move(rdata);
+            record.rdata = std::move(rdataWire);
 
             CassUuid uuid;
             cass_value_get_uuid(idVal, &uuid);
@@ -246,11 +246,11 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
 
             std::string zoneName(zoneStr, zoneLen);
 
-            const cass_byte_t *nameBytes;
+            const char *name;
             size_t nameSize;
-            cass_value_get_bytes(nameVal, &nameBytes, &nameSize);
+            cass_value_get_string(nameVal, &name, &nameSize);
 
-            std::vector<uint8_t> nameWire(nameBytes, nameBytes + nameSize);
+            std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(name);
 
             cass_int16_t type;
             cass_value_get_int16(typeVal, &type);
@@ -258,16 +258,16 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
             cass_int32_t ttl;
             cass_value_get_int32(ttlVal, &ttl);
 
-            const cass_byte_t *rdataBytes;
+            const char *rdata;
             size_t rdataSize;
-            cass_value_get_bytes(valueVal, &rdataBytes, &rdataSize);
+            cass_value_get_string(valueVal, &rdata, &rdataSize);
 
-            std::vector<uint8_t> rdata(rdataBytes, rdataBytes + rdataSize);
+            std::vector<uint8_t> rdataWire = Utils::Vector::stringToWire(rdata);
 
             Record record;
             record.type = static_cast<uint16_t>(type);
             record.ttl = static_cast<uint32_t>(ttl);
-            record.rdata = std::move(rdata);
+            record.rdata = std::move(rdataWire);
 
             CassUuid uuid;
             cass_value_get_uuid(idVal, &uuid);

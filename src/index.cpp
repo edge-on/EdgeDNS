@@ -32,11 +32,13 @@ int main()
             cass_value_get_string(zoneVal, &zoneStr, &zoneLen);
             std::string zone(zoneStr, zoneLen);
 
-            const cass_byte_t *nameBytes;
-            size_t nameSize;
-            cass_value_get_bytes(nameVal, &nameBytes, &nameSize);
+            std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(std::string(zoneStr, zoneLen));
 
-            std::vector<uint8_t> nameWire(nameBytes, nameBytes + nameSize);
+            const char *name;
+            size_t nameSize;
+            cass_value_get_string(nameVal, &name, &nameSize);
+
+            std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(std::string(name, nameSize));
 
             cass_int16_t type;
             cass_value_get_int16(typeVal, &type);
@@ -44,18 +46,16 @@ int main()
             cass_int32_t ttl;
             cass_value_get_int32(ttlVal, &ttl);
 
-            const cass_byte_t *rdataBytes;
+            const char *rdata;
             size_t rdataSize;
-            cass_value_get_bytes(valueVal, &rdataBytes, &rdataSize);
+            cass_value_get_string(valueVal, &rdata, &rdataSize);
 
-            std::vector<uint8_t> rdata(rdataBytes, rdataBytes + rdataSize);
+            std::vector<uint8_t> rdataWire = Utils::Vector::stringToWire(rdata);
 
             Record record;
             record.type = static_cast<uint16_t>(type);
             record.ttl = static_cast<uint32_t>(ttl);
-            record.rdata = std::move(rdata);
-
-            std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone);
+            record.rdata = std::move(rdataWire);
 
             auto [it, inserted] = zones.try_emplace(zoneWire);
 

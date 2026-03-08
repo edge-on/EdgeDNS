@@ -587,7 +587,7 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                         {
                             list[i] = list.back();
                             list.pop_back();
-                            break;
+                            continue;
                         }
 
                         Record &rec = r_it->second;
