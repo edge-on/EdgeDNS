@@ -52,7 +52,7 @@ int main()
 
             std::string rdataStr(rdata, rdataSize);
 
-            std::vector<uint8_t> rdataWire = RData::generateRData(rdata, type);
+            std::vector<uint8_t> rdataWire = RData::generateRData(rdataStr, type);
 
             Record record;
             record.type = static_cast<uint16_t>(type);
