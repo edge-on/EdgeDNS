@@ -18,7 +18,9 @@
 #include "DNS/Zone.hpp"
 
 #include "Cassandra/Cassandra.hpp"
+
 #include "Utils/Vector.hpp"
+#include "Utils/String.hpp"
 
 class Main
 {

@@ -32,13 +32,13 @@ int main()
             cass_value_get_string(zoneVal, &zoneStr, &zoneLen);
             std::string zone(zoneStr, zoneLen);
 
-            std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(std::string(zoneStr, zoneLen));
+            std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(std::string(zoneStr, zoneLen), true);
 
             const char *name;
             size_t nameSize;
             cass_value_get_string(nameVal, &name, &nameSize);
 
-            std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(std::string(name, nameSize));
+            std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(std::string(name, nameSize), true);
 
             cass_int16_t type;
             cass_value_get_int16(typeVal, &type);
@@ -50,7 +50,33 @@ int main()
             size_t rdataSize;
             cass_value_get_string(valueVal, &rdata, &rdataSize);
 
-            std::vector<uint8_t> rdataWire = Utils::Vector::stringToWire(rdata);
+            std::string rdataStr(rdata, rdataSize);
+
+            std::vector<uint8_t> rdataWire;
+
+            if (type == 6)
+            {
+                int sindex = 0;
+                for (auto &p : Utils::String::splitBySpace(rdataStr))
+                {
+                    if (sindex <= 1)
+                    {
+                        auto w = Utils::Vector::stringToWire(p, true);
+                        rdataWire.insert(rdataWire.end(), w.begin(), w.end());
+                    }
+                    else
+                    {
+                        uint32_t val = std::stoul(p);
+                        auto w = Utils::Vector::toBE32(val);
+                        rdataWire.insert(rdataWire.end(), w.begin(), w.end());
+                    }
+                    sindex++;
+                }
+            }
+            else
+            {
+                rdataWire = Utils::Vector::stringToWire(rdataStr, true);
+            }
 
             Record record;
             record.type = static_cast<uint16_t>(type);

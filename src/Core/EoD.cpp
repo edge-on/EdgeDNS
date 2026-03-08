@@ -406,7 +406,7 @@ void EoD::handleIPC(int fd)
 
         std::string zone = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
 
-        auto it = zones.find(Utils::Vector::stringToWire(zone));
+        auto it = zones.find(Utils::Vector::stringToWire(zone, true));
         if (it != zones.end())
         {
             int reloadedCount = DNS::incrementalReloadZone(zone, it->second->version);

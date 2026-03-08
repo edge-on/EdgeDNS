@@ -52,19 +52,45 @@ void DNS::reloadZone(std::string zone)
             size_t nameSize;
             cass_value_get_string(nameVal, &name, &nameSize);
 
-            std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(name);
+            std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(name, true);
 
             cass_int16_t type;
             cass_value_get_int16(typeVal, &type);
 
             cass_int32_t ttl;
             cass_value_get_int32(ttlVal, &ttl);
-
+            
             const char *rdata;
             size_t rdataSize;
             cass_value_get_string(valueVal, &rdata, &rdataSize);
 
-            std::vector<uint8_t> rdataWire = Utils::Vector::stringToWire(rdata);
+            std::string rdataStr(rdata, rdataSize);
+
+            std::vector<uint8_t> rdataWire;
+
+            if (type == 6)
+            {
+                int sindex = 0;
+                for (auto &p : Utils::String::splitBySpace(rdataStr))
+                {
+                    if (sindex <= 1)
+                    {
+                        auto w = Utils::Vector::stringToWire(p, true);
+                        rdataWire.insert(rdataWire.end(), w.begin(), w.end());
+                    }
+                    else
+                    {
+                        uint32_t val = std::stoul(p);
+                        auto w = Utils::Vector::toBE32(val);
+                        rdataWire.insert(rdataWire.end(), w.begin(), w.end());
+                    }
+                    sindex++;
+                }
+            }
+            else
+            {
+                rdataWire = Utils::Vector::stringToWire(rdataStr, true);
+            }
 
             Record record;
             record.type = static_cast<uint16_t>(type);
@@ -80,7 +106,7 @@ void DNS::reloadZone(std::string zone)
             new_zone->names[nameWire][type].push_back(std::move(key));
         }
 
-        std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone);
+        std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone, true);
         zones[zoneWire] = new_zone;
 
         cass_iterator_free(iterator);
@@ -106,7 +132,7 @@ int DNS::incrementalReloadZone(std::string zone, CassUuid version)
 
     cass_future_wait(future);
 
-    std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone);
+    std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone, true);
 
     if (cass_future_error_code(future) == CASS_OK)
     {
@@ -250,7 +276,7 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
             size_t nameSize;
             cass_value_get_string(nameVal, &name, &nameSize);
 
-            std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(name);
+            std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(name, true);
 
             cass_int16_t type;
             cass_value_get_int16(typeVal, &type);
@@ -262,7 +288,33 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
             size_t rdataSize;
             cass_value_get_string(valueVal, &rdata, &rdataSize);
 
-            std::vector<uint8_t> rdataWire = Utils::Vector::stringToWire(rdata);
+            std::string rdataStr(rdata, rdataSize);
+
+            std::vector<uint8_t> rdataWire;
+
+            if (type == 6)
+            {
+                int sindex = 0;
+                for (auto &p : Utils::String::splitBySpace(rdataStr))
+                {
+                    if (sindex <= 1)
+                    {
+                        auto w = Utils::Vector::stringToWire(p, true);
+                        rdataWire.insert(rdataWire.end(), w.begin(), w.end());
+                    }
+                    else
+                    {
+                        uint32_t val = std::stoul(p);
+                        auto w = Utils::Vector::toBE32(val);
+                        rdataWire.insert(rdataWire.end(), w.begin(), w.end());
+                    }
+                    sindex++;
+                }
+            }
+            else
+            {
+                rdataWire = Utils::Vector::stringToWire(rdataStr, true);
+            }
 
             Record record;
             record.type = static_cast<uint16_t>(type);

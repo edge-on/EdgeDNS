@@ -28,7 +28,7 @@ namespace Utils
             return std::vector<uint8_t>(str.begin(), str.end());
         }
 
-        static std::vector<uint8_t> stringToWire(const std::string &input)
+        static std::vector<uint8_t> stringToWire(const std::string &input, const bool &zero)
         {
             std::vector<uint8_t> wire;
 
@@ -63,7 +63,10 @@ namespace Utils
                 pos = dot + 1;
             }
 
-            wire.push_back(0);
+            if (zero)
+            {
+                wire.push_back(0);
+            }
 
             return wire;
         }
@@ -85,5 +88,14 @@ namespace Utils
 
             return result;
         }
+
+        static std::vector<uint8_t> toBE32(uint32_t val)
+        {
+            return std::vector<uint8_t>{
+                (uint8_t)(val >> 24),
+                (uint8_t)(val >> 16),
+                (uint8_t)(val >> 8),
+                (uint8_t)(val)};
+        };
     };
 } // namespace Utils
