@@ -573,77 +573,79 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
 
             if (nameIt != zoneIt->second->names.end())
             {
-                auto &list = nameIt->second;
+                auto typeIt = nameIt->second.find(qtype);
 
-                for (size_t i = 0; i < list.size();)
+                if (typeIt != nameIt->second.end())
                 {
-                    auto r_it = records.find(list[i]);
+                    auto &list = typeIt->second;
 
-                    if (r_it == records.end())
+                    for (size_t i = 0; i < list.size();)
                     {
-                        list[i] = list.back();
-                        list.pop_back();
-                        continue;
-                    }
+                        auto r_it = records.find(list[i]);
 
-                    Record &rec = r_it->second;
-                    UUIDKey record = list[i];
-
-                    if (records[record].type != qtype)
-                        continue;
-
-                    if (is_rrl)
-                    {
-                        RRLKey key;
-                        key.prefix = ip;
-                        key.rcode = 0;
-
-                        uint32_t zone;
-                        memcpy(&zone, zoneWire.data(), sizeof(uint32_t));
-
-                        key.zone_id = zone;
-
-                        uint32_t current = now();
-
-                        auto &bucket = thread.rrlBuckets[key];
-
-                        if (bucket.window_start != current)
+                        if (r_it == records.end())
                         {
-                            bucket.window_start = current;
-                            bucket.responses = 1;
-                        }
-                        else
-                        {
-                            bucket.responses += 1;
+                            list[i] = list.back();
+                            list.pop_back();
+                            break;
                         }
 
-                        if (bucket.responses > threshold)
+                        Record &rec = r_it->second;
+                        UUIDKey record = list[i];
+
+                        if (is_rrl)
                         {
-                            truncated = true;
+                            RRLKey key;
+                            key.prefix = ip;
+                            key.rcode = 0;
+
+                            uint32_t zone;
+                            memcpy(&zone, zoneWire.data(), sizeof(uint32_t));
+
+                            key.zone_id = zone;
+
+                            uint32_t current = now();
+
+                            auto &bucket = thread.rrlBuckets[key];
+
+                            if (bucket.window_start != current)
+                            {
+                                bucket.window_start = current;
+                                bucket.responses = 1;
+                            }
+                            else
+                            {
+                                bucket.responses += 1;
+                            }
+
+                            if (bucket.responses > threshold)
+                            {
+                                truncated = true;
+                            }
                         }
+
+                        if (!truncated)
+                        {
+                            write16(response, 0xC00C); // pointer
+                            write16(response, records[record].type);
+                            write16(response, 1); // IN (qclass)
+                            write32(response, records[record].ttl);
+                            write16(response, records[record].rdata.size());
+
+                            response.insert(response.end(),
+                                            records[record].rdata.begin(),
+                                            records[record].rdata.end());
+
+                            anc++;
+                        }
+
+                        i++;
                     }
 
-                    if (!truncated)
+                    if (anc == 0)
                     {
-                        write16(response, 0xC00C); // pointer
-                        write16(response, records[record].type);
-                        write16(response, 1); // IN (qclass)
-                        write32(response, records[record].ttl);
-                        write16(response, records[record].rdata.size());
-
-                        response.insert(response.end(),
-                                        records[record].rdata.begin(),
-                                        records[record].rdata.end());
-
-                        anc++;
+                        // NOERROR, empty answer
                     }
-
-                    i++;
-                }
-
-                if (anc == 0)
-                {
-                    // NOERROR, empty answer
                 }
             }
             else

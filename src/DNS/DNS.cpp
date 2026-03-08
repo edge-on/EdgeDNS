@@ -77,7 +77,7 @@ void DNS::reloadZone(std::string zone)
             UUIDKey key = DNS::uuidToKey(uuid);
 
             records[key] = std::move(record);
-            new_zone->names[nameWire].push_back(std::move(key));
+            new_zone->names[nameWire][type].push_back(std::move(key));
         }
 
         std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone);
@@ -275,7 +275,7 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
             UUIDKey key = DNS::uuidToKey(uuid);
 
             records[key] = std::move(record);
-            zones[zoneWire]->names[nameWire].push_back(std::move(key));
+            zones[zoneWire]->names[nameWire][type].push_back(std::move(key));
 
             count++;
         }

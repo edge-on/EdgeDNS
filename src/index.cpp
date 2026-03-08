@@ -76,7 +76,8 @@ int main()
             UUIDKey key = DNS::uuidToKey(uuid);
 
             records[key] = std::move(record);
-            it->second->names[nameWire].push_back(std::move(key));
+
+            it->second->names[nameWire][type].push_back(std::move(key));
         }
 
         cass_iterator_free(iterator);

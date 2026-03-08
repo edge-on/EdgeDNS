@@ -3,6 +3,7 @@
 #include <cassandra.h>
 
 #include <ankerl/unordered_dense.h>
+#include <map>
 
 struct Record
 {
@@ -41,13 +42,14 @@ struct UUIDHash
     }
 };
 
+using TypeMap = ankerl::unordered_dense::map<uint16_t, std::vector<UUIDKey>>;
+
 using NameMap = ankerl::unordered_dense::map<
     std::vector<uint8_t>,
-    std::vector<UUIDKey>,
+    TypeMap,
     ByteVecHash>;
 
-struct Zone
-{
+struct Zone {
     uint32_t id;
     NameMap names;
     CassUuid version;
