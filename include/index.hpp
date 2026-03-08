@@ -22,6 +22,8 @@
 #include "Utils/Vector.hpp"
 #include "Utils/String.hpp"
 
+#include "Core/RData/RData.hpp"
+
 class Main
 {
 public:

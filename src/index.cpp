@@ -52,31 +52,7 @@ int main()
 
             std::string rdataStr(rdata, rdataSize);
 
-            std::vector<uint8_t> rdataWire;
-
-            if (type == 6)
-            {
-                int sindex = 0;
-                for (auto &p : Utils::String::splitBySpace(rdataStr))
-                {
-                    if (sindex <= 1)
-                    {
-                        auto w = Utils::Vector::stringToWire(p, true);
-                        rdataWire.insert(rdataWire.end(), w.begin(), w.end());
-                    }
-                    else
-                    {
-                        uint32_t val = std::stoul(p);
-                        auto w = Utils::Vector::toBE32(val);
-                        rdataWire.insert(rdataWire.end(), w.begin(), w.end());
-                    }
-                    sindex++;
-                }
-            }
-            else
-            {
-                rdataWire = Utils::Vector::stringToWire(rdataStr, true);
-            }
+            std::vector<uint8_t> rdataWire = RData::generateRData(rdata, type);
 
             Record record;
             record.type = static_cast<uint16_t>(type);

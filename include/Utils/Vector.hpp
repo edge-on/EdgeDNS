@@ -89,6 +89,23 @@ namespace Utils
             return result;
         }
 
+        static std::vector<uint8_t> ipv4ToWire(const std::string &ip)
+        {
+            std::vector<uint8_t> wire;
+            std::stringstream ss(ip);
+            std::string part;
+            while (std::getline(ss, part, '.'))
+            {
+                int byte = std::stoi(part);
+                if (byte < 0 || byte > 255)
+                    throw std::runtime_error("Invalid IPv4 part");
+                wire.push_back(static_cast<uint8_t>(byte));
+            }
+            if (wire.size() != 4)
+                throw std::runtime_error("Invalid IPv4 address");
+            return wire;
+        }
+
         static std::vector<uint8_t> toBE32(uint32_t val)
         {
             return std::vector<uint8_t>{
