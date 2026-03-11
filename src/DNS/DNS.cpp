@@ -156,7 +156,8 @@ int DNS::incrementalReloadZone(std::string zone, CassUuid version)
     cass_future_free(future);
     cass_statement_free(statement);
 
-    count = count + handleIncrementalReloadZone(zoneWire, version);
+    int aCount = handleIncrementalReloadZone(zoneWire, version);
+    count = count + aCount;
 
     return count;
 }
@@ -222,37 +223,21 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
 
             const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
 
-            CassUuid v;
-            cass_value_get_uuid(versionVal, &v);
-
-            auto it = zones.find(zoneWire);
-            if (it == zones.end())
-            {
-                CassUuid uuid;
-                cass_uuid_from_string("00000000-0000-1000-8080-808080808080", &uuid);
-
-                zones[zoneWire] = std::make_shared<Zone>();
-                zones[zoneWire]->id = Main::next_zone_id++;
-
-                zones[zoneWire]->version = uuid;
-            }
-
-            if (zones[zoneWire]->version.time_and_version < v.time_and_version)
-            {
-                zones[zoneWire]->version = version;
-            }
+            CassUuid version;
+            cass_value_get_uuid(versionVal, &version);
 
             const char *zoneStr;
             size_t zoneLen;
             cass_value_get_string(zoneVal, &zoneStr, &zoneLen);
+            std::string zone(zoneStr, zoneLen);
 
-            std::string zoneName(zoneStr, zoneLen);
+            std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(std::string(zoneStr, zoneLen), true);
 
             const char *name;
             size_t nameSize;
             cass_value_get_string(nameVal, &name, &nameSize);
 
-            std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(name, true);
+            std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(std::string(name, nameSize), true);
 
             cass_int16_t type;
             cass_value_get_int16(typeVal, &type);
@@ -273,13 +258,29 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
             record.ttl = static_cast<uint32_t>(ttl);
             record.rdata = std::move(rdataWire);
 
+            auto [it, inserted] = zones.try_emplace(zoneWire);
+
+            if (inserted)
+            {
+                it->second = std::make_shared<Zone>();
+                it->second->id = Main::next_zone_id++;
+
+                it->second->version.time_and_version = 0;
+                it->second->version.clock_seq_and_node = 0;
+            }
+
+            if (it->second->version.time_and_version < version.time_and_version)
+            {
+                it->second->version = version;
+            }
+
             CassUuid uuid;
             cass_value_get_uuid(idVal, &uuid);
 
             UUIDKey key = DNS::uuidToKey(uuid);
 
             records[key] = std::move(record);
-            zones[zoneWire]->names[nameWire][type].push_back(std::move(key));
+            it->second->names[nameWire][type].push_back(std::move(key));
 
             count++;
         }

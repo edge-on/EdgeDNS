@@ -61,15 +61,18 @@ int main()
 
             auto [it, inserted] = zones.try_emplace(zoneWire);
 
-            if (!it->second)
+            if (inserted)
             {
                 it->second = std::make_shared<Zone>();
                 it->second->id = Main::next_zone_id++;
 
-                if (it->second->version.time_and_version < version.time_and_version)
-                {
-                    it->second->version = version;
-                }
+                it->second->version.time_and_version = 0;
+                it->second->version.clock_seq_and_node = 0;
+            }
+
+            if (it->second->version.time_and_version < version.time_and_version)
+            {
+                it->second->version = version;
             }
 
             CassUuid uuid;
@@ -78,7 +81,6 @@ int main()
             UUIDKey key = DNS::uuidToKey(uuid);
 
             records[key] = std::move(record);
-
             it->second->names[nameWire][type].push_back(std::move(key));
         }
 

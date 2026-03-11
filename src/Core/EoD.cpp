@@ -572,6 +572,8 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
             {
                 auto typeIt = nameIt->second.find(qtype);
 
+                std::cout << "QTYPE: " << qtype << std::endl;
+
                 if (typeIt != nameIt->second.end())
                 {
                     auto &list = typeIt->second;
@@ -580,8 +582,12 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                     {
                         auto r_it = records.find(list[i]);
 
+                            std::cout << "Here" << list[i].hi << std::endl;
+                            std::cout << "Here" << list[i].lo << std::endl;
+                            
                         if (r_it == records.end())
                         {
+
                             list[i] = list.back();
                             list.pop_back();
                             continue;
