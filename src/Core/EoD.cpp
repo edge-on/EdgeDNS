@@ -340,8 +340,6 @@ void EoD::initIPC()
         perror("eod_ipc_fd socket");
     }
 
-    makeNonBlocking(eod_ipc_fd);
-
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
     strcpy(addr.sun_path, "/run/eod.sock");
@@ -361,16 +359,15 @@ void EoD::initIPC()
     while (true)
     {
         int client_fd = accept(eod_ipc_fd, nullptr, nullptr);
-        if (client_fd < 0)
+        if (client_fd >= 0)
         {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                continue;
-            perror("accept");
-            continue;
+            std::thread([this, client_fd]()
+                        {
+                            handleIPC(client_fd);
+                            close(client_fd);
+                        })
+                .detach();
         }
-
-        handleIPC(client_fd);
-        close(client_fd);
     }
 }
 
