@@ -739,6 +739,15 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
     response[2] = (response_flags >> 8) & 0xFF;
     response[3] = response_flags & 0xFF;
 
+    response[10] = 0;
+    response[11] = 1;
+
+    response.push_back(0);   // Name: . (Root)
+    write16(response, 41);   // Type: OPT (EDNS0)
+    write16(response, 4096); // Payload size: 4096
+    write32(response, 0);    // TTL: 0
+    write16(response, 0);    // RDLEN: 0
+
     return response;
 }
 
