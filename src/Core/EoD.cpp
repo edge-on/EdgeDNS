@@ -493,6 +493,20 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
 
     size_t question_end = offset;
 
+    // ---------------- READ ADDITIONAL ----------------
+    // NAME
+    offset++;
+
+    uint16_t edns_type = read16();
+    uint16_t edns_class = read16();
+
+    // TTL
+    read16();
+    read16();
+
+    // RDLEN
+    read16();
+
     // ---------------- FIND ZONE (Longest suffix) ----------------
     std::vector<uint8_t> zoneWire;
 
@@ -681,17 +695,22 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
         }
     }
 
-    if (truncated)
-    {
-        response_flags |= 0x0200; // TC (TCP) Truncated
-    }
-
     // ---------------- FIX HEADER ----------------
     response[6] = (anc >> 8) & 0xFF;
     response[7] = anc & 0xFF;
 
     response[2] = (response_flags >> 8) & 0xFF;
     response[3] = response_flags & 0xFF;
+
+    if (response.size() < edns_class)
+    {
+        truncated = true;
+    }
+
+    if (truncated)
+    {
+        response_flags |= 0x0200; // TC (TCP) Truncated
+    }
 
     return response;
 }
