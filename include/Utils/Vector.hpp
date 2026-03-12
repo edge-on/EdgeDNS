@@ -52,7 +52,7 @@ namespace Utils
                 size_t len = dot - pos;
 
                 /*if (len == 0 || len > 63)
-                    throw std::runtime_error("Invalid label length");* /
+                    throw std::runtime_error("Invalid label length");*/
 
                 wire.push_back(static_cast<uint8_t>(len));
 
