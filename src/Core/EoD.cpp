@@ -637,6 +637,20 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                             }
                         }
 
+                        uint16_t udp_limit = edns_class ? edns_class : 512;
+                        size_t rr_size =
+                            2 + // pointer
+                            2 + // type
+                            2 + // class
+                            4 + // ttl
+                            2 + // rdlen
+                            records[record].rdata.size();
+
+                        if (!is_tcp && response.size() + rr_size > udp_limit)
+                        {
+                            truncated = true;
+                        }
+
                         if (!truncated)
                         {
                             write16(response, 0xC00C); // pointer
@@ -656,6 +670,24 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                                 response.insert(response.end(),
                                                 rdata.begin(),
                                                 rdata.end());
+                            }
+                            else if (records[record].type == 16)
+                            {
+                                const std::vector<uint8_t> &d = records[record].rdata;
+
+                                uint16_t total_rdlen = d.size() + ((d.size() + 254) / 255);
+
+                                write16(response, total_rdlen);
+
+                                size_t pos = 0;
+                                while (pos < d.size())
+                                {
+                                    uint8_t chunk = (uint8_t)std::min((size_t)255, d.size() - pos);
+                                    response.push_back(chunk);
+                                    response.insert(response.end(), d.begin() + pos, d.begin() + pos + chunk);
+                                    pos += chunk;
+                                }
+                                anc++;
                             }
                             else
                             {
@@ -695,22 +727,17 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
         }
     }
 
+    if (truncated)
+    {
+        response_flags |= 0x0200; // TC (TCP) Truncated
+    }
+
     // ---------------- FIX HEADER ----------------
     response[6] = (anc >> 8) & 0xFF;
     response[7] = anc & 0xFF;
 
     response[2] = (response_flags >> 8) & 0xFF;
     response[3] = response_flags & 0xFF;
-
-    if (response.size() < edns_class)
-    {
-        truncated = true;
-    }
-
-    if (truncated)
-    {
-        response_flags |= 0x0200; // TC (TCP) Truncated
-    }
 
     return response;
 }
