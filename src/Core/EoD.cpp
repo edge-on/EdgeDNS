@@ -509,13 +509,20 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
 
     // ---------------- FIND ZONE (Longest suffix) ----------------
     std::vector<uint8_t> zoneWire;
-
     size_t i = 0;
+
     while (i < nameWire.size() && nameWire[i] != 0)
     {
-        std::vector<uint8_t> candidate(nameWire.begin() + i,
-                                       nameWire.end());
+        std::vector<uint8_t> candidate(nameWire.begin() + i, nameWire.end());
 
+        for (auto &byte : candidate)
+        {
+            if (byte >= 'A' && byte <= 'Z')
+            {
+                byte += 32;
+            }
+        }
+        
         if (zones.find(candidate) != zones.end())
         {
             zoneWire = candidate;
