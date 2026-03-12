@@ -9,6 +9,7 @@ struct Record
 {
     uint16_t type;
     uint32_t ttl;
+    uint16_t priority;
     std::vector<uint8_t> rdata;
 };
 

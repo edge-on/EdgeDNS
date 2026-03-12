@@ -20,6 +20,7 @@ int main()
             const CassValue *nameVal = cass_row_get_column_by_name(row, "name");
             const CassValue *typeVal = cass_row_get_column_by_name(row, "type");
             const CassValue *ttlVal = cass_row_get_column_by_name(row, "ttl");
+            const CassValue *prioVal = cass_row_get_column_by_name(row, "prio");
             const CassValue *valueVal = cass_row_get_column_by_name(row, "value");
 
             const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
@@ -46,6 +47,9 @@ int main()
             cass_int32_t ttl;
             cass_value_get_int32(ttlVal, &ttl);
 
+            cass_int32_t prio;
+            cass_value_get_int32(prioVal, &prio);
+
             const char *rdata;
             size_t rdataSize;
             cass_value_get_string(valueVal, &rdata, &rdataSize);
@@ -57,6 +61,7 @@ int main()
             Record record;
             record.type = static_cast<uint16_t>(type);
             record.ttl = static_cast<uint32_t>(ttl);
+            record.priority = prio;
             record.rdata = std::move(rdataWire);
 
             auto [it, inserted] = zones.try_emplace(zoneWire);

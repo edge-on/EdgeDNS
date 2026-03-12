@@ -176,6 +176,7 @@ void DNS::handleIncrementalZone(std::vector<uint8_t> zoneWire, CassUuid version,
 
             UUIDKey key = DNS::uuidToKey(record_id);
 
+            // We cannot find the valid record for erase.. COME BACK!
             auto it = records.find(key);
             if (it != records.end())
             {
@@ -219,6 +220,7 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
             const CassValue *nameVal = cass_row_get_column_by_name(row, "name");
             const CassValue *typeVal = cass_row_get_column_by_name(row, "type");
             const CassValue *ttlVal = cass_row_get_column_by_name(row, "ttl");
+            const CassValue *prioVal = cass_row_get_column_by_name(row, "prio");
             const CassValue *valueVal = cass_row_get_column_by_name(row, "value");
 
             const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
@@ -245,6 +247,9 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
             cass_int32_t ttl;
             cass_value_get_int32(ttlVal, &ttl);
 
+            cass_int32_t prio;
+            cass_value_get_int32(prioVal, &prio);
+
             const char *rdata;
             size_t rdataSize;
             cass_value_get_string(valueVal, &rdata, &rdataSize);
@@ -257,6 +262,7 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
             record.type = static_cast<uint16_t>(type);
             record.ttl = static_cast<uint32_t>(ttl);
             record.rdata = std::move(rdataWire);
+            record.priority = prio;
 
             auto [it, inserted] = zones.try_emplace(zoneWire);
 

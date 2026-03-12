@@ -364,8 +364,7 @@ void EoD::initIPC()
             std::thread([this, client_fd]()
                         {
                             handleIPC(client_fd);
-                            close(client_fd);
-                        })
+                            close(client_fd); })
                 .detach();
         }
     }
@@ -582,9 +581,6 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                     {
                         auto r_it = records.find(list[i]);
 
-                            std::cout << "Here" << list[i].hi << std::endl;
-                            std::cout << "Here" << list[i].lo << std::endl;
-                            
                         if (r_it == records.end())
                         {
 
@@ -633,11 +629,28 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                             write16(response, records[record].type);
                             write16(response, 1); // IN (qclass)
                             write32(response, records[record].ttl);
-                            write16(response, records[record].rdata.size());
 
-                            response.insert(response.end(),
-                                            records[record].rdata.begin(),
-                                            records[record].rdata.end());
+                            if (qtype == 15)
+                            {
+                                std::vector<uint8_t> rdata;
+
+                                write16(rdata, records[record].priority);
+                                rdata.insert(rdata.end(), records[record].rdata.begin(), records[record].rdata.end());
+
+                                write16(response, rdata.size());
+
+                                response.insert(response.end(),
+                                                rdata.begin(),
+                                                rdata.end());
+                            }
+                            else
+                            {
+                                write16(response, records[record].rdata.size());
+
+                                response.insert(response.end(),
+                                                records[record].rdata.begin(),
+                                                records[record].rdata.end());
+                            }
 
                             anc++;
                         }
