@@ -511,27 +511,32 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
     std::vector<uint8_t> zoneWire;
     size_t i = 0;
 
+    for (auto &byte : nameWire)
+    {
+        if (byte >= 'A' && byte <= 'Z')
+        {
+            byte += 32;
+        }
+    }
+
+    std::vector<uint8_t> zoneWire;
+    size_t i = 0;
+
     while (i < nameWire.size() && nameWire[i] != 0)
     {
         std::vector<uint8_t> candidate(nameWire.begin() + i, nameWire.end());
 
-        for (auto &byte : candidate)
-        {
-            if (byte >= 'A' && byte <= 'Z')
-            {
-                byte += 32;
-            }
-        }
-        
         if (zones.find(candidate) != zones.end())
         {
             zoneWire = candidate;
             break;
         }
 
+        if (i + nameWire[i] + 1 > nameWire.size())
+            break;
+
         i += nameWire[i] + 1;
     }
-
     // ---------------- BUILD RESPONSE ----------------
 
     /*
