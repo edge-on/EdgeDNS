@@ -74,11 +74,27 @@ namespace Utils
         static std::vector<uint8_t> txtToWire(const std::string &txt)
         {
             std::vector<uint8_t> wire;
-            if (txt.size() > 255)
-                throw std::runtime_error("TXT too long");
+            size_t pos = 0;
+            size_t total_size = txt.size();
 
-            wire.push_back(static_cast<uint8_t>(txt.size()));
-            wire.insert(wire.end(), txt.begin(), txt.end());
+            if (total_size == 0)
+            {
+                wire.push_back(0);
+                return wire;
+            }
+
+            while (pos < total_size)
+            {
+                uint8_t chunk_len = static_cast<uint8_t>(std::min<size_t>(255, total_size - pos));
+
+                wire.push_back(chunk_len);
+
+                wire.insert(wire.end(),
+                            txt.begin() + pos,
+                            txt.begin() + pos + chunk_len);
+
+                pos += chunk_len;
+            }
 
             return wire;
         }

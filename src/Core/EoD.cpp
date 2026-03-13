@@ -682,11 +682,9 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                             }
                             else if (records[record].type == 16)
                             {
-                                write16(response, records[record].rdata.size());
+                                write16(response, static_cast<uint16_t>(records[record].rdata.size()));
 
-                                response.insert(response.end(),
-                                                records[record].rdata.begin(),
-                                                records[record].rdata.end());
+                                response.insert(response.end(), records[record].rdata.begin(), records[record].rdata.end());
                             }
                             else
                             {
