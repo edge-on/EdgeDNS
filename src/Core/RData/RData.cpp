@@ -27,6 +27,9 @@ std::vector<uint8_t> RData::generateRData(std::string data, int type)
     {
         rdataWire = Utils::Vector::ipv4ToWire(data);
     }
+    else if(type == 16) {
+        rdataWire = Utils::Vector::txtToWire(data);
+    }
     else
     {
         rdataWire = Utils::Vector::stringToWire(data, true);

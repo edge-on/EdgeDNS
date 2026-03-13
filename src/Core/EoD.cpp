@@ -682,21 +682,11 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                             }
                             else if (records[record].type == 16)
                             {
-                                const std::vector<uint8_t> &d = records[record].rdata;
+                                write16(response, records[record].rdata.size());
 
-                                uint16_t total_rdlen = d.size() + ((d.size() + 254) / 255);
-
-                                write16(response, total_rdlen);
-
-                                size_t pos = 0;
-                                while (pos < d.size())
-                                {
-                                    uint8_t chunk = (uint8_t)std::min((size_t)255, d.size() - pos);
-                                    response.push_back(chunk);
-                                    response.insert(response.end(), d.begin() + pos, d.begin() + pos + chunk);
-                                    pos += chunk;
-                                }
-                                anc++;
+                                response.insert(response.end(),
+                                                records[record].rdata.begin(),
+                                                records[record].rdata.end());
                             }
                             else
                             {

@@ -71,6 +71,18 @@ namespace Utils
             return wire;
         }
 
+        static std::vector<uint8_t> txtToWire(const std::string &txt)
+        {
+            std::vector<uint8_t> wire;
+            if (txt.size() > 255)
+                throw std::runtime_error("TXT too long");
+
+            wire.push_back(static_cast<uint8_t>(txt.size()));
+            wire.insert(wire.end(), txt.begin(), txt.end());
+
+            return wire;
+        }
+
         static std::string wireToDomain(const uint8_t *data, size_t len)
         {
             std::string result;
