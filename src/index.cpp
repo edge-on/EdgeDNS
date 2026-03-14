@@ -4,6 +4,8 @@ Cassandra *Main::cas = nullptr;
 
 int main()
 {
+    GeoDNS::test();
+    
     Main::cas = new Cassandra();
 
     if (Main::cas->connect())
