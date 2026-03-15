@@ -79,6 +79,11 @@ void EoD::worker(int th)
                     conn.fd = client_fd;
                     conn.ip = htons(event.sin_addr.s_addr);
 
+                    char ip_str[INET_ADDRSTRLEN];
+                    inet_ntop(AF_INET, &event.sin_addr.s_addr, ip_str, INET_ADDRSTRLEN);
+
+                    conn.ip_str = ip_str;
+
                     thread.connections.emplace(client_fd, std::move(conn));
 
                     epoll_event e{};
@@ -193,8 +198,11 @@ void EoD::handleUDP(Thread &thread)
 
         uint32_t ip = ntohl(clients[i].sin_addr.s_addr);
 
+        char ip_str[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &clients[i].sin_addr, ip_str, INET_ADDRSTRLEN);
+
         std::vector<uint8_t> resp =
-            handle(recv_buffers[i], false, ip, thread);
+            handle(recv_buffers[i], false, ip, ip_str, thread);
 
         memcpy(send_buffers[i], resp.data(), resp.size());
 
@@ -298,7 +306,7 @@ void EoD::handleTCP(Connection &conn, Thread &thread)
 
         conn.expectedLength = 0;
 
-        auto response = handle(dnsPacket.data(), true, conn.ip, thread);
+        auto response = handle(dnsPacket.data(), true, conn.ip, conn.ip_str, thread);
 
         uint16_t len = htons(response.size());
 
@@ -440,8 +448,10 @@ void EoD::handleIPC(int fd)
     }
 }
 
-std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, Thread &thread)
+std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, char *ip_str, Thread &thread)
 {
+    std::cout << Static::dns->getCountry(ip_str) << std::endl;
+
     if (is_logging)
     {
         std::cout << (is_tcp ? "TCP " : "UDP ") << "Request" << std::endl;

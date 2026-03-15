@@ -29,6 +29,8 @@
 
 #include "Core/IPC/IPC.hpp"
 
+#include "Global/Static.hpp"
+
 class EoD
 {
 public:
@@ -40,6 +42,7 @@ public:
         int fd;
 
         uint32_t ip;
+        char* ip_str;
 
         std::vector<uint8_t> readBuffer;
         std::vector<uint8_t> writeBuffer;
@@ -84,14 +87,14 @@ public:
     void enableWrite(int fd, int epoll_fd);
     void disableWrite(int fd, int epoll_fd);
 
-    std::vector<uint8_t> handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, Thread &thread);
+    std::vector<uint8_t> handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, char* ip_str, Thread &thread);
 
     std::atomic<uint32_t> g_second;
     uint32_t now();
     void start_clock_thread();
 
 private:
-    int eod_port = 8902;
+    int eod_port = 53;
 
     int max_event = 10;
 
