@@ -10,8 +10,6 @@ int main()
 
     if (Main::cas->connect())
     {
-        std::cout << "Is Exist: " << (Domain::zoneIsExist("edgeon.dev") == true ? "TRUE" : "FALSE") << std::endl;
-
         const CassResult *result = Main::cas->execute("SELECT * FROM edgeon.records;");
         CassIterator *iterator = cass_iterator_from_result(result);
 
@@ -75,8 +73,7 @@ int main()
                 it->second = std::make_shared<Zone>();
                 it->second->id = Main::next_zone_id++;
 
-                it->second->version.time_and_version = 0;
-                it->second->version.clock_seq_and_node = 0;
+                cass_uuid_from_string("00000000-0000-1000-8080-808080808080", &it->second->version);
             }
 
             if (it->second->version.time_and_version < version.time_and_version)

@@ -100,6 +100,11 @@ int DNS::incrementalReloadZone(std::string zone, CassUuid version)
 {
     int count = 0;
 
+    if (version.clock_seq_and_node == 0 && version.time_and_version == 0)
+    {
+        cass_uuid_from_string("00000000-0000-1000-8080-808080808080", &version);
+    }
+
     CassStatement *statement =
         cass_statement_new("SELECT * FROM edgeon.versions WHERE zone = ? AND version > ?;", 2);
 
@@ -159,7 +164,7 @@ int DNS::incrementalReloadZone(std::string zone, CassUuid version)
     cass_future_free(future);
     cass_statement_free(statement);
 
-    int aCount = handleIncrementalReloadZone(zoneWire, version);
+    int aCount = handleIncrementalReloadZone(zone, version);
     count = count + aCount;
 
     return count;
@@ -189,24 +194,23 @@ void DNS::handleIncrementalZone(std::vector<uint8_t> zoneWire, CassUuid version,
     }
 }
 
-int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid version)
+int DNS::handleIncrementalReloadZone(std::string zone, CassUuid version)
 {
     int count = 0;
 
     CassStatement *statement =
         cass_statement_new("SELECT * FROM edgeon.records WHERE zone = ? AND version > ?;", 2);
 
-    std::string zoneName = Utils::Vector::wireToDomain(zoneWire.data(), zoneWire.size());
+    char buffer[CASS_UUID_STRING_LENGTH];
+    cass_uuid_string(version, buffer);
 
-    cass_statement_bind_string(statement, 0, zoneName.c_str());
+    cass_statement_bind_string(statement, 0, zone.c_str());
     cass_statement_bind_uuid(statement, 1, version);
 
     CassFuture *future =
         cass_session_execute(Main::cas->session, statement);
 
     cass_future_wait(future);
-
-    auto new_zone = std::make_shared<Zone>();
 
     if (cass_future_error_code(future) == CASS_OK)
     {
@@ -274,8 +278,7 @@ int DNS::handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid ver
                 it->second = std::make_shared<Zone>();
                 it->second->id = Main::next_zone_id++;
 
-                it->second->version.time_and_version = 0;
-                it->second->version.clock_seq_and_node = 0;
+                cass_uuid_from_string("00000000-0000-1000-8080-808080808080", &it->second->version);
             }
 
             if (it->second->version.time_and_version < version.time_and_version)

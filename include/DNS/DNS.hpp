@@ -24,7 +24,7 @@ public:
 
     // Incremental Reload
     static int incrementalReloadZone(std::string zone, CassUuid version);
-    static int handleIncrementalReloadZone(std::vector<uint8_t> zoneWire, CassUuid version);
+    static int handleIncrementalReloadZone(std::string zoneWire, CassUuid version);
 
 private:
     static void handleIncrementalZone(std::vector<uint8_t> zoneWire, CassUuid version, CassUuid record_id, int action);

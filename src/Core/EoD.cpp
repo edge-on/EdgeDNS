@@ -438,9 +438,11 @@ void EoD::handleIPC(int fd)
 
             int reloadedCount = DNS::incrementalReloadZone(zone, uuid);
 
+            std::cout << "< < <" << std::endl;
+            
             if (is_logging)
             {
-                std::cout << 0 << " records reloaded in " << zone << "!" << std::endl;
+                std::cout << reloadedCount << " records reloaded in " << zone << "!" << std::endl;
             }
 
             send(fd, response.data(), response.size(), 0);
