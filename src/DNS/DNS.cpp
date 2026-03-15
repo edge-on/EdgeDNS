@@ -176,7 +176,7 @@ void DNS::handleIncrementalZone(std::vector<uint8_t> zoneWire, CassUuid version,
 
             UUIDKey key = DNS::uuidToKey(record_id);
 
-            // We cannot find the valid record for erase.. COME BACK!
+            /* HERE MAY BE PROBLEMATIC */
             auto it = records.find(key);
             if (it != records.end())
             {

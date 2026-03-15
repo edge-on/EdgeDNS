@@ -3,7 +3,7 @@
 void GeoDNS::test()
 {
     const char *db_path = "GeoDNS/GeoLite2-City.mmdb";
-    const char *ip = "8.8.8.8";
+    const char *ip = "2.58.80.193";
 
     MMDB_s mmdb;
     int status = MMDB_open(db_path, MMDB_MODE_MMAP, &mmdb);
@@ -54,4 +54,6 @@ void GeoDNS::test()
     }
 
     MMDB_close(&mmdb);
+
+    std::cout << "GeoDNS Loadeed Successfully." << std::endl;
 }

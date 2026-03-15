@@ -17,6 +17,7 @@ void EoD::start()
     for (int i = 0; i < threadCount; ++i)
     {
         threads.emplace_back(&EoD::worker, this, i);
+        activeThreads[i].id = threads[i].get_id();
     }
 
     std::thread ipc_thread = std::thread(&EoD::initIPC, this);
@@ -143,6 +144,9 @@ void EoD::initUDP(Thread &thread)
     {
         perror("epoll ctl");
     }
+
+    std::lock_guard<std::mutex> lock(cout_mutex);
+    std::cout << "UDP Socket Initalized On Thread " << thread.id << ".\n";
 }
 
 void EoD::handleUDP(Thread &thread)
@@ -252,6 +256,9 @@ void EoD::initTCP(Thread &thread)
     {
         perror("epoll tcp ctl");
     }
+
+    std::lock_guard<std::mutex> lock(cout_mutex);
+    std::cout << "TCP Socket Initalized On Thread " << thread.id << ".\n";
 }
 
 void EoD::handleTCP(Connection &conn, Thread &thread)
@@ -355,6 +362,8 @@ void EoD::initIPC()
     {
         perror("eod_ipc_fd listen");
     }
+
+    std::cout << "IPC Socket Initalized.\n";
 
     while (true)
     {

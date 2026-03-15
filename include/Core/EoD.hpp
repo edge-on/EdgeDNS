@@ -48,6 +48,8 @@ public:
 
     struct Thread
     {
+        std::thread::id id;
+
         int epoll_fd;
 
         int eod_udp_fd;
@@ -102,4 +104,6 @@ private:
     std::vector<std::thread> threads;
 
     uint32_t threshold = 200;
+
+    std::mutex cout_mutex;
 };
