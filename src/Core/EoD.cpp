@@ -450,8 +450,6 @@ void EoD::handleIPC(int fd)
 
 std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, char *ip_str, Thread &thread)
 {
-    std::cout << Static::dns->getCountry(ip_str) << std::endl;
-
     if (is_logging)
     {
         std::cout << (is_tcp ? "TCP " : "UDP ") << "Request" << std::endl;

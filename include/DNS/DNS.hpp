@@ -9,6 +9,8 @@
 #include "DNS/RRL.hpp"
 #include "DNS/Zone.hpp"
 
+#include "Zone/Domain.hpp"
+
 class DNS
 {
 public:

@@ -26,6 +26,8 @@
 
 #include "Global/Static.hpp"
 
+#include "Zone/Domain.hpp"
+
 class Main
 {
 public:

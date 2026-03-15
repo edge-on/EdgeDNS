@@ -2,95 +2,98 @@
 
 void DNS::reloadZone(std::string zone)
 {
-    CassStatement *statement =
-        cass_statement_new("SELECT * FROM edgeon.records WHERE zone = ?;", 1);
-
-    cass_statement_bind_string(statement, 0, zone.c_str());
-
-    CassFuture *future =
-        cass_session_execute(Main::cas->session, statement);
-
-    cass_future_wait(future);
-
-    if (cass_future_error_code(future) == CASS_OK)
+    if (!(Domain::zoneIsExist(zone)))
     {
-        const CassResult *result = cass_future_get_result(future);
+        CassStatement *statement =
+            cass_statement_new("SELECT * FROM edgeon.records WHERE zone = ?;", 1);
 
-        CassIterator *iterator = cass_iterator_from_result(result);
+        cass_statement_bind_string(statement, 0, zone.c_str());
 
-        auto new_zone = std::make_shared<Zone>();
-        new_zone->id = Main::next_zone_id++;
+        CassFuture *future =
+            cass_session_execute(Main::cas->session, statement);
 
-        while (cass_iterator_next(iterator))
+        cass_future_wait(future);
+
+        if (cass_future_error_code(future) == CASS_OK)
         {
-            const CassRow *row = cass_iterator_get_row(iterator);
+            const CassResult *result = cass_future_get_result(future);
 
-            const CassValue *idVal = cass_row_get_column_by_name(row, "id");
-            const CassValue *zoneVal = cass_row_get_column_by_name(row, "zone");
-            const CassValue *nameVal = cass_row_get_column_by_name(row, "name");
-            const CassValue *typeVal = cass_row_get_column_by_name(row, "type");
-            const CassValue *ttlVal = cass_row_get_column_by_name(row, "ttl");
-            const CassValue *valueVal = cass_row_get_column_by_name(row, "value");
+            CassIterator *iterator = cass_iterator_from_result(result);
 
-            const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
+            auto new_zone = std::make_shared<Zone>();
+            new_zone->id = Main::next_zone_id++;
 
-            CassUuid version;
-            cass_value_get_uuid(versionVal, &version);
-
-            if (new_zone->version.time_and_version < version.time_and_version)
+            while (cass_iterator_next(iterator))
             {
-                new_zone->version = version;
+                const CassRow *row = cass_iterator_get_row(iterator);
+
+                const CassValue *idVal = cass_row_get_column_by_name(row, "id");
+                const CassValue *zoneVal = cass_row_get_column_by_name(row, "zone");
+                const CassValue *nameVal = cass_row_get_column_by_name(row, "name");
+                const CassValue *typeVal = cass_row_get_column_by_name(row, "type");
+                const CassValue *ttlVal = cass_row_get_column_by_name(row, "ttl");
+                const CassValue *valueVal = cass_row_get_column_by_name(row, "value");
+
+                const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
+
+                CassUuid version;
+                cass_value_get_uuid(versionVal, &version);
+
+                if (new_zone->version.time_and_version < version.time_and_version)
+                {
+                    new_zone->version = version;
+                }
+
+                const char *zoneStr;
+                size_t zoneLen;
+                cass_value_get_string(zoneVal, &zoneStr, &zoneLen);
+
+                std::string zoneName(zoneStr, zoneLen);
+
+                const char *name;
+                size_t nameSize;
+                cass_value_get_string(nameVal, &name, &nameSize);
+
+                std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(name, true);
+
+                cass_int16_t type;
+                cass_value_get_int16(typeVal, &type);
+
+                cass_int32_t ttl;
+                cass_value_get_int32(ttlVal, &ttl);
+
+                const char *rdata;
+                size_t rdataSize;
+                cass_value_get_string(valueVal, &rdata, &rdataSize);
+
+                std::string rdataStr(rdata, rdataSize);
+
+                std::vector<uint8_t> rdataWire = RData::generateRData(rdataStr, type);
+
+                Record record;
+                record.type = static_cast<uint16_t>(type);
+                record.ttl = static_cast<uint32_t>(ttl);
+                record.rdata = std::move(rdataWire);
+
+                CassUuid uuid;
+                cass_value_get_uuid(idVal, &uuid);
+
+                UUIDKey key = DNS::uuidToKey(uuid);
+
+                records[key] = std::move(record);
+                new_zone->names[nameWire][type].push_back(std::move(key));
             }
 
-            const char *zoneStr;
-            size_t zoneLen;
-            cass_value_get_string(zoneVal, &zoneStr, &zoneLen);
+            std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone, true);
+            zones[zoneWire] = new_zone;
 
-            std::string zoneName(zoneStr, zoneLen);
-
-            const char *name;
-            size_t nameSize;
-            cass_value_get_string(nameVal, &name, &nameSize);
-
-            std::vector<uint8_t> nameWire = Utils::Vector::stringToWire(name, true);
-
-            cass_int16_t type;
-            cass_value_get_int16(typeVal, &type);
-
-            cass_int32_t ttl;
-            cass_value_get_int32(ttlVal, &ttl);
-
-            const char *rdata;
-            size_t rdataSize;
-            cass_value_get_string(valueVal, &rdata, &rdataSize);
-
-            std::string rdataStr(rdata, rdataSize);
-
-            std::vector<uint8_t> rdataWire = RData::generateRData(rdataStr, type);
-
-            Record record;
-            record.type = static_cast<uint16_t>(type);
-            record.ttl = static_cast<uint32_t>(ttl);
-            record.rdata = std::move(rdataWire);
-
-            CassUuid uuid;
-            cass_value_get_uuid(idVal, &uuid);
-
-            UUIDKey key = DNS::uuidToKey(uuid);
-
-            records[key] = std::move(record);
-            new_zone->names[nameWire][type].push_back(std::move(key));
+            cass_iterator_free(iterator);
+            cass_result_free(result);
         }
 
-        std::vector<uint8_t> zoneWire = Utils::Vector::stringToWire(zone, true);
-        zones[zoneWire] = new_zone;
-
-        cass_iterator_free(iterator);
-        cass_result_free(result);
+        cass_future_free(future);
+        cass_statement_free(statement);
     }
-
-    cass_future_free(future);
-    cass_statement_free(statement);
 }
 
 int DNS::incrementalReloadZone(std::string zone, CassUuid version)

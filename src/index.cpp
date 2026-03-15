@@ -10,6 +10,8 @@ int main()
 
     if (Main::cas->connect())
     {
+        std::cout << "Is Exist: " << (Domain::zoneIsExist("edgeon.dev") == true ? "TRUE" : "FALSE") << std::endl;
+
         const CassResult *result = Main::cas->execute("SELECT * FROM edgeon.records;");
         CassIterator *iterator = cass_iterator_from_result(result);
 
