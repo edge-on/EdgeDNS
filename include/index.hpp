@@ -24,7 +24,7 @@
 
 #include "Core/RData/RData.hpp"
 
-#include "DNS/Geo/GeoDNS.hpp"
+#include "Global/Static.hpp"
 
 class Main
 {

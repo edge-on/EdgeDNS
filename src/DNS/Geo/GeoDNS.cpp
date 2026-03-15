@@ -1,11 +1,7 @@
 #include "DNS/Geo/GeoDNS.hpp"
 
-void GeoDNS::test()
+void GeoDNS::init()
 {
-    const char *db_path = "GeoDNS/GeoLite2-City.mmdb";
-    const char *ip = "2.58.80.193";
-
-    MMDB_s mmdb;
     int status = MMDB_open(db_path, MMDB_MODE_MMAP, &mmdb);
     if (status != MMDB_SUCCESS)
     {
@@ -29,7 +25,14 @@ void GeoDNS::test()
         }
         close(fd);
     }
-    
+
+    std::cout << "GeoDNS Loadeed Successfully." << std::endl;
+}
+
+std::string GeoDNS::getCountry(char *ip)
+{
+    std::string country;
+
     int gai_error, mmdb_error;
     MMDB_lookup_result_s result = MMDB_lookup_string(&mmdb, ip, &gai_error, &mmdb_error);
 
@@ -48,12 +51,12 @@ void GeoDNS::test()
         {
             if (entry_data.has_data)
             {
-                std::cout << "Country: " << std::string(entry_data.utf8_string, entry_data.data_size) << "\n";
+                country = std::string(entry_data.utf8_string, entry_data.data_size);
             }
         }
     }
 
     MMDB_close(&mmdb);
 
-    std::cout << "GeoDNS Loadeed Successfully." << std::endl;
+    return country;
 }

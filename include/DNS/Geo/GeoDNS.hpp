@@ -10,5 +10,11 @@
 class GeoDNS
 {
 public:
-    static void test();
+    void init();
+    std::string getCountry(char *ip);
+
+private:
+    MMDB_s mmdb;
+    
+    const char *db_path = "GeoDNS/GeoLite2-City.mmdb";
 };
