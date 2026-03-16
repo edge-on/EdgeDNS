@@ -24,6 +24,10 @@ int main()
             const CassValue *ttlVal = cass_row_get_column_by_name(row, "ttl");
             const CassValue *prioVal = cass_row_get_column_by_name(row, "prio");
             const CassValue *valueVal = cass_row_get_column_by_name(row, "value");
+            
+            const CassValue *isProxyVal = cass_row_get_column_by_name(row, "is_proxy");
+            const CassValue *isGeoVal = cass_row_get_column_by_name(row, "is_geo");
+            const CassValue *ipGroupVal = cass_row_get_column_by_name(row, "ip_group");
 
             const CassValue *versionVal = cass_row_get_column_by_name(row, "version");
 
@@ -52,19 +56,35 @@ int main()
             cass_int32_t prio;
             cass_value_get_int32(prioVal, &prio);
 
+            cass_bool_t is_proxy;
+            cass_value_get_bool(isProxyVal, &is_proxy);
+
+            cass_bool_t is_geo;
+            cass_value_get_bool(isGeoVal, &is_geo);
+
+            CassUuid group_id;
+            cass_value_get_uuid(ipGroupVal, &group_id);
+
             const char *rdata;
             size_t rdataSize;
             cass_value_get_string(valueVal, &rdata, &rdataSize);
 
             std::string rdataStr(rdata, rdataSize);
 
-            std::vector<uint8_t> rdataWire = RData::generateRData(rdataStr, type);
+            std::vector<uint8_t> rdataWire;
+
+            if (!is_geo)
+            {
+                rdataWire = RData::generateRData(rdataStr, type);
+            }
 
             Record record;
             record.type = static_cast<uint16_t>(type);
             record.ttl = static_cast<uint32_t>(ttl);
-            record.priority = prio;
             record.rdata = std::move(rdataWire);
+            record.isGeo = is_geo;
+            record.group_id = group_id;
+            record.isProxy = is_proxy;
 
             auto [it, inserted] = zones.try_emplace(zoneWire);
 

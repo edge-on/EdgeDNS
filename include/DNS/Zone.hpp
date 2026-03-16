@@ -10,6 +10,12 @@ struct Record
     uint16_t type;
     uint32_t ttl;
     uint16_t priority;
+    
+    bool isProxy;
+    
+    bool isGeo;
+    CassUuid group_id;
+
     std::vector<uint8_t> rdata;
 };
 

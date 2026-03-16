@@ -122,15 +122,26 @@ namespace Utils
             std::vector<uint8_t> wire;
             std::stringstream ss(ip);
             std::string part;
+
             while (std::getline(ss, part, '.'))
             {
-                int byte = std::stoi(part);
-                if (byte < 0 || byte > 255)
-                    throw std::runtime_error("Invalid IPv4 part");
-                wire.push_back(static_cast<uint8_t>(byte));
+                try
+                {
+                    int byte = std::stoi(part);
+                    if (byte < 0 || byte > 255)
+                        return {};
+
+                    wire.push_back(static_cast<uint8_t>(byte));
+                }
+                catch (...)
+                {
+                    return {};
+                }
             }
+
             if (wire.size() != 4)
-                throw std::runtime_error("Invalid IPv4 address");
+                return {};
+
             return wire;
         }
 
