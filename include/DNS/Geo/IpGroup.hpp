@@ -27,9 +27,15 @@ struct UUIDHash
 
 using EntryMap = ankerl::unordered_dense::map<
     CassUuid,
+    IpEntry,
+    UUIDHash
+>;
+
+using GroupEntryMap = ankerl::unordered_dense::map<
+    CassUuid,
     ankerl::unordered_dense::map<
         std::string,
-        std::vector<IpEntry>
+        std::vector<CassUuid>
         >,
     UUIDHash>;
 
@@ -39,4 +45,5 @@ using GroupMap = ankerl::unordered_dense::map<
     UUIDHash>;
 
 extern EntryMap entries;
+extern GroupEntryMap group_entries;
 extern GroupMap groups;
