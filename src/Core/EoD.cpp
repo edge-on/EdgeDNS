@@ -439,7 +439,7 @@ void EoD::handleIPC(int fd)
             int reloadedCount = DNS::incrementalReloadZone(zone, uuid);
 
             std::cout << "< < <" << std::endl;
-            
+
             if (is_logging)
             {
                 std::cout << reloadedCount << " records reloaded in " << zone << "!" << std::endl;
@@ -613,7 +613,10 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
             {
                 auto typeIt = nameIt->second.find(qtype);
 
-                std::cout << "QTYPE: " << qtype << std::endl;
+                if (is_logging)
+                {
+                    std::cout << "QTYPE: " << qtype << std::endl;
+                }
 
                 if (typeIt != nameIt->second.end())
                 {
@@ -707,11 +710,23 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                             }
                             else
                             {
-                                write16(response, records[record].rdata.size());
+                                if (qtype == 1 && rec.isGeo)
+                                {
+                                    std::vector<uint8_t> ipW = entries[rec.group_id][group_entries[rec.group_id]["DEFAULT"][0]].ip;
 
-                                response.insert(response.end(),
-                                                records[record].rdata.begin(),
-                                                records[record].rdata.end());
+                                    write16(response, ipW.size());
+                                    response.insert(response.end(),
+                                                    ipW.begin(),
+                                                    ipW.end());
+                                }
+                                else
+                                {
+                                    write16(response, records[record].rdata.size());
+
+                                    response.insert(response.end(),
+                                                    records[record].rdata.begin(),
+                                                    records[record].rdata.end());
+                                }
                             }
 
                             anc++;

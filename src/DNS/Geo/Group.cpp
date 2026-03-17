@@ -2,6 +2,8 @@
 
 void Group::initIpGroups()
 {
+    int count = 0;
+
     CassStatement *statement =
         cass_statement_new("SELECT * FROM edgeon.ip_groups;", 0);
 
@@ -29,6 +31,8 @@ void Group::initIpGroups()
             cass_uuid_from_string("00000000-0000-1000-8080-808080808080", &group.version);
 
             groups[group_id] = group;
+
+            count++;
         }
 
         cass_iterator_free(iterator);
@@ -38,11 +42,13 @@ void Group::initIpGroups()
     cass_future_free(future);
     cass_statement_free(statement);
 
-    std::cout << "Ip Groups Loaded" << std::endl;
+    std::cout << count << " Ip Group Loaded" << std::endl;
 }
 
 void Group::initIpEntries()
 {
+    int count = 0;
+
     CassStatement *statement =
         cass_statement_new("SELECT * FROM edgeon.ip_group_entries;", 0);
 
@@ -112,6 +118,8 @@ void Group::initIpEntries()
             }
 
             entries[group_id][id] = std::move(entry);
+
+            count++;
         }
 
         cass_iterator_free(iterator);
@@ -121,7 +129,7 @@ void Group::initIpEntries()
     cass_future_free(future);
     cass_statement_free(statement);
 
-    std::cout << "Ip Entries Loaded" << std::endl;
+    std::cout << count << " Ip Entry Loaded" << std::endl;
 }
 
 void Group::fullReload(CassUuid g)
