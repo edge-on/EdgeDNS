@@ -14,7 +14,7 @@ public:
 
     static void fullReload(CassUuid groupId);
     static void incrementalReload(CassUuid groupId);
-    
-    static void incrementalRemoved(CassUuid groupId);
-    static void incrementalAdded(CassUuid groupId);
+
+    static void incrementalRemoved(CassUuid group_id, CassUuid entry_id);
+    static int incrementalAdded(CassUuid groupId, CassUuid version);
 };

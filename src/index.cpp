@@ -10,6 +10,9 @@ int main()
 
     if (Main::cas->connect())
     {
+        Group::initIpGroups();
+        Group::initIpEntries();
+
         const CassResult *result = Main::cas->execute("SELECT * FROM edgeon.records;");
         CassIterator *iterator = cass_iterator_from_result(result);
 

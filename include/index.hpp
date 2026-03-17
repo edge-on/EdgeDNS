@@ -28,6 +28,8 @@
 
 #include "Zone/Domain.hpp"
 
+#include "DNS/Geo/Group.hpp"
+
 class Main
 {
 public:
