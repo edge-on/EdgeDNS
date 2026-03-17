@@ -10,6 +10,7 @@
 class Group {
 public:
     static void initIpGroups();
+    static void initIpEntries();
 
     static void fullReload(CassUuid groupId);
     static void incrementalReload(CassUuid groupId);

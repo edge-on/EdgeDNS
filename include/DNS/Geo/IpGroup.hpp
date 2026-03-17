@@ -7,7 +7,13 @@ struct IpEntry
 {
     std::string countryCode;
     std::vector<uint8_t> ip;
+
     int priority;
+};
+
+struct IpGroup
+{
+    CassUuid version;
 };
 
 struct UUIDHash
@@ -19,12 +25,18 @@ struct UUIDHash
     }
 };
 
-using GroupMap = ankerl::unordered_dense::map<
-    CassUuid, // group_id
+using EntryMap = ankerl::unordered_dense::map<
+    CassUuid,
     ankerl::unordered_dense::map<
-        std::string,         // location code (DE, USA, ...)
-        std::vector<IpEntry> // IP entries
+        std::string,
+        std::vector<IpEntry>
         >,
     UUIDHash>;
 
+using GroupMap = ankerl::unordered_dense::map<
+    CassUuid,
+    IpGroup,
+    UUIDHash>;
+
+extern EntryMap entries;
 extern GroupMap groups;
