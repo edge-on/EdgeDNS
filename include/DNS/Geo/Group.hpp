@@ -1,15 +1,16 @@
 #pragma once
 
-class Group
-{
-public:
-    struct IpGroup
-    {
-        /* data */
-    };
+#include <cassandra.h>
+#include <ankerl/unordered_dense.h>
 
-    struct IpEntry
-    {
-        /* data */
-    };
+#include "DNS/Geo/IpGroup.hpp"
+
+#include "index.hpp"
+
+class Group {
+public:
+    static void initIpGroups();
+
+    static void fullReload(CassUuid groupId);
+    static void incrementalReload(CassUuid groupId);
 };
