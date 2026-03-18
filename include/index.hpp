@@ -30,6 +30,8 @@
 
 #include "DNS/Geo/Group.hpp"
 
+#include "DNS/Proxy/Proxy.hpp"
+
 class Main
 {
 public:

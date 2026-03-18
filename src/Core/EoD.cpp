@@ -745,15 +745,14 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                             }
                             else
                             {
-                                if (rec.isGeo)
+                                if (rec.isProxy)
                                 {
-                                    std::cout << "Here worked: " << rec.isGeo << std::endl;
 
                                     if (qtype == 1)
                                     {
                                         std::vector<uint8_t> ipW = {};
 
-                                        auto gIt = group_entries.find(rec.group_id);
+                                        auto gIt = group_entries.find(Proxy::proxy_group_id);
                                         if (gIt != group_entries.end())
                                         {
                                             std::string countryCode = Static::dns->getCountry(ip_str);
@@ -763,7 +762,7 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                                             {
                                                 CassUuid entry_id = defIt->second[0];
 
-                                                auto eIt = entries.find(rec.group_id);
+                                                auto eIt = entries.find(Proxy::proxy_group_id);
                                                 if (eIt != entries.end())
                                                 {
                                                     auto ipIt = eIt->second.find(entry_id);
@@ -780,7 +779,7 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                                                 {
                                                     CassUuid entry_id = defIt->second[0];
 
-                                                    auto eIt = entries.find(rec.group_id);
+                                                    auto eIt = entries.find(Proxy::proxy_group_id);
                                                     if (eIt != entries.end())
                                                     {
                                                         auto ipIt = eIt->second.find(entry_id);
@@ -799,11 +798,64 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                                 }
                                 else
                                 {
-                                    write16(response, records[record].rdata.size());
+                                    if (rec.isGeo)
+                                    {
+                                        if (qtype == 1)
+                                        {
+                                            std::vector<uint8_t> ipW = {};
 
-                                    response.insert(response.end(),
-                                                    records[record].rdata.begin(),
-                                                    records[record].rdata.end());
+                                            auto gIt = group_entries.find(rec.group_id);
+                                            if (gIt != group_entries.end())
+                                            {
+                                                std::string countryCode = Static::dns->getCountry(ip_str);
+
+                                                auto defIt = gIt->second.find(countryCode);
+                                                if (defIt != gIt->second.end() && !defIt->second.empty())
+                                                {
+                                                    CassUuid entry_id = defIt->second[0];
+
+                                                    auto eIt = entries.find(rec.group_id);
+                                                    if (eIt != entries.end())
+                                                    {
+                                                        auto ipIt = eIt->second.find(entry_id);
+                                                        if (ipIt != eIt->second.end())
+                                                        {
+                                                            ipW = ipIt->second.ip;
+                                                        }
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    auto defIt = gIt->second.find("DEFAULT");
+                                                    if (defIt != gIt->second.end() && !defIt->second.empty())
+                                                    {
+                                                        CassUuid entry_id = defIt->second[0];
+
+                                                        auto eIt = entries.find(rec.group_id);
+                                                        if (eIt != entries.end())
+                                                        {
+                                                            auto ipIt = eIt->second.find(entry_id);
+                                                            if (ipIt != eIt->second.end())
+                                                            {
+                                                                ipW = ipIt->second.ip;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            write16(response, ipW.size());
+                                            response.insert(response.end(), ipW.begin(), ipW.end());
+                                        }
+                                    }
+                                    else
+                                    {
+                                        write16(response, records[record].rdata.size());
+
+                                        response.insert(response.end(),
+                                                        records[record].rdata.begin(),
+                                                        records[record].rdata.end());
+                                    }
                                 }
                             }
 

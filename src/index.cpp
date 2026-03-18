@@ -13,6 +13,8 @@ int main()
         Group::initIpGroups();
         Group::initIpEntries();
 
+        Proxy::reloadProxyGroup();
+
         const CassResult *result = Main::cas->execute("SELECT * FROM edgeon.records;");
         CassIterator *iterator = cass_iterator_from_result(result);
 

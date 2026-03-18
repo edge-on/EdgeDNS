@@ -31,6 +31,8 @@
 
 #include "Global/Static.hpp"
 
+#include "DNS/Proxy/Proxy.hpp"
+
 class EoD
 {
 public:
