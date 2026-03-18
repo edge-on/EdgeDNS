@@ -134,6 +134,8 @@ void Group::initIpEntries()
 
 void Group::fullReload(CassUuid g)
 {
+    int count = 0;
+
     CassStatement *statement =
         cass_statement_new("SELECT * FROM edgeon.ip_group_entries WHERE group_id = ?;", 1);
 
@@ -208,6 +210,8 @@ void Group::fullReload(CassUuid g)
             }
 
             entries[group_id][id] = std::move(entry);
+
+            count += 1;
         }
 
         cass_iterator_free(iterator);
@@ -216,6 +220,8 @@ void Group::fullReload(CassUuid g)
 
     cass_future_free(future);
     cass_statement_free(statement);
+
+    std::cout << count << " Ip Entries Reloaded!" << std::endl;
 }
 
 void Group::incrementalReload(CassUuid g)
@@ -223,11 +229,10 @@ void Group::incrementalReload(CassUuid g)
     int count = 0;
 
     CassStatement *statement =
-        cass_statement_new("SELECT * FROM edgeon.ip_group_versions WHERE group_id = ?;", 1);
+        cass_statement_new("SELECT * FROM edgeon.ip_group_versions WHERE group_id = ? AND version > ?;", 2);
 
     cass_statement_bind_uuid(statement, 0, g);
-
-    CassUuid v = groups[g].version;
+    cass_statement_bind_uuid(statement, 1, v);
 
     CassFuture *future =
         cass_session_execute(Main::cas->session, statement);
@@ -268,7 +273,7 @@ void Group::incrementalReload(CassUuid g)
                 count += 1;
             }
 
-            if (groups[g].version.time_and_version < version.time_and_version)
+            if (groups[g].version.time_and_version < version.time_and_version || (groups[g].version.time_and_version == version.time_and_version && groups[g].version.clock_seq_and_node < version.clock_seq_and_node))
             {
                 groups[g].version = version;
             }
@@ -339,9 +344,6 @@ int Group::incrementalAdded(CassUuid g, CassUuid v)
 
         CassIterator *iterator = cass_iterator_from_result(result);
 
-        group_entries[g].clear();
-        entries[g].clear();
-
         while (cass_iterator_next(iterator))
         {
             const CassRow *row = cass_iterator_get_row(iterator);
@@ -391,7 +393,7 @@ int Group::incrementalAdded(CassUuid g, CassUuid v)
 
             entry.indexInVector = vec.size() - 1;
 
-            if (groups[group_id].version.time_and_version < version.time_and_version)
+            if (groups[group_id].version.time_and_version < version.time_and_version || (groups[group_id].version.time_and_version == version.time_and_version && groups[group_id].version.clock_seq_and_node < version.clock_seq_and_node))
             {
                 groups[group_id].version = version;
             }

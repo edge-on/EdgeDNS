@@ -394,58 +394,93 @@ void EoD::handleIPC(int fd)
     read(fd, buffer.data(), buffer.size());
 
     int offset = 0;
+    uint8_t type = buffer[offset];
+    offset++;
+
     uint8_t code = buffer[offset];
     offset++;
 
-    if (code == IPC::Commands::RELOAD)
+    if (type == IPC::GROUP)
     {
-        std::vector<uint8_t> response;
-        response.push_back(IPC::Commands::DONE);
-
-        std::string zone = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
-        DNS::reloadZone(zone);
-
-        if (is_logging)
+        if (code == IPC::Commands::RELOAD)
         {
-            std::cout << "Zone " << zone << " Reloaded!" << std::endl;
-        }
+            std::vector<uint8_t> response;
+            response.push_back(IPC::Commands::DONE);
 
-        send(fd, response.data(), response.size(), 0);
-    }
-    else if (code == IPC::Commands::INCREMENTAL)
-    {
-        std::vector<uint8_t> response;
-        response.push_back(IPC::Commands::DONE);
+            std::string param = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
 
-        std::string zone = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
-
-        auto it = zones.find(Utils::Vector::stringToWire(zone, true));
-        if (it != zones.end())
-        {
-            int reloadedCount = DNS::incrementalReloadZone(zone, it->second->version);
-
-            if (is_logging)
-            {
-                std::cout << reloadedCount << " records reloaded in " << zone << "!" << std::endl;
-            }
-
-            send(fd, response.data(), response.size(), 0);
-        }
-        else
-        {
             CassUuid uuid;
-            cass_uuid_from_string("00000000-0000-1000-8080-808080808080", &uuid);
+            cass_uuid_from_string(param.c_str(), &uuid);
 
-            int reloadedCount = DNS::incrementalReloadZone(zone, uuid);
+            Group::fullReload(uuid);
 
-            std::cout << "< < <" << std::endl;
+            send(fd, response.data(), response.size(), 0);
+        }
+        else if (code == IPC::Commands::INCREMENTAL)
+        {
+            std::vector<uint8_t> response;
+            response.push_back(IPC::Commands::DONE);
+
+            std::string param = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
+
+            CassUuid uuid;
+            cass_uuid_from_string(param.c_str(), &uuid);
+
+            Group::incrementalReload(uuid);
+
+            send(fd, response.data(), response.size(), 0);
+        }
+    }
+    else if (type == IPC::ZONE)
+    {
+        if (code == IPC::Commands::RELOAD)
+        {
+            std::vector<uint8_t> response;
+            response.push_back(IPC::Commands::DONE);
+
+            std::string zone = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
+            DNS::reloadZone(zone);
 
             if (is_logging)
             {
-                std::cout << reloadedCount << " records reloaded in " << zone << "!" << std::endl;
+                std::cout << "Zone " << zone << " Reloaded!" << std::endl;
             }
 
             send(fd, response.data(), response.size(), 0);
+        }
+        else if (code == IPC::Commands::INCREMENTAL)
+        {
+            std::vector<uint8_t> response;
+            response.push_back(IPC::Commands::DONE);
+
+            std::string zone = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
+
+            auto it = zones.find(Utils::Vector::stringToWire(zone, true));
+            if (it != zones.end())
+            {
+                int reloadedCount = DNS::incrementalReloadZone(zone, it->second->version);
+
+                if (is_logging)
+                {
+                    std::cout << reloadedCount << " records reloaded in " << zone << "!" << std::endl;
+                }
+
+                send(fd, response.data(), response.size(), 0);
+            }
+            else
+            {
+                CassUuid uuid;
+                cass_uuid_from_string("00000000-0000-1000-8080-808080808080", &uuid);
+
+                int reloadedCount = DNS::incrementalReloadZone(zone, uuid);
+
+                if (is_logging)
+                {
+                    std::cout << reloadedCount << " records reloaded in " << zone << "!" << std::endl;
+                }
+
+                send(fd, response.data(), response.size(), 0);
+            }
         }
     }
 }
@@ -712,12 +747,30 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                             {
                                 if (qtype == 1 && rec.isGeo)
                                 {
-                                    std::vector<uint8_t> ipW = entries[rec.group_id][group_entries[rec.group_id]["DEFAULT"][0]].ip;
+                                    std::vector<uint8_t> ipW = {};
 
+                                    auto gIt = group_entries.find(rec.group_id);
+                                    if (gIt != group_entries.end())
+                                    {
+                                        auto defIt = gIt->second.find("DEFAULT");
+                                        if (defIt != gIt->second.end() && !defIt->second.empty())
+                                        {
+                                            CassUuid entry_id = defIt->second[0];
+
+                                            auto eIt = entries.find(rec.group_id);
+                                            if (eIt != entries.end())
+                                            {
+                                                auto ipIt = eIt->second.find(entry_id);
+                                                if (ipIt != eIt->second.end())
+                                                {
+                                                    ipW = ipIt->second.ip;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
                                     write16(response, ipW.size());
-                                    response.insert(response.end(),
-                                                    ipW.begin(),
-                                                    ipW.end());
+                                    response.insert(response.end(), ipW.begin(), ipW.end());
                                 }
                                 else
                                 {
