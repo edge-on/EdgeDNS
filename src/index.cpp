@@ -27,7 +27,7 @@ int main()
             const CassValue *ttlVal = cass_row_get_column_by_name(row, "ttl");
             const CassValue *prioVal = cass_row_get_column_by_name(row, "prio");
             const CassValue *valueVal = cass_row_get_column_by_name(row, "value");
-            
+
             const CassValue *isProxyVal = cass_row_get_column_by_name(row, "is_proxy");
             const CassValue *isGeoVal = cass_row_get_column_by_name(row, "is_geo");
             const CassValue *ipGroupVal = cass_row_get_column_by_name(row, "ip_group");
@@ -59,14 +59,24 @@ int main()
             cass_int32_t prio;
             cass_value_get_int32(prioVal, &prio);
 
-            cass_bool_t is_proxy;
-            cass_value_get_bool(isProxyVal, &is_proxy);
+            cass_bool_t is_proxy = cass_false;
+            cass_bool_t is_geo = cass_false;
 
-            cass_bool_t is_geo;
-            cass_value_get_bool(isGeoVal, &is_geo);
+            if (!cass_value_is_null(isProxyVal))
+                cass_value_get_bool(isProxyVal, &is_proxy);
+
+            if (!cass_value_is_null(isGeoVal))
+                cass_value_get_bool(isGeoVal, &is_geo);
 
             CassUuid group_id;
-            cass_value_get_uuid(ipGroupVal, &group_id);
+            if (!cass_value_is_null(ipGroupVal))
+            {
+                cass_value_get_uuid(ipGroupVal, &group_id);
+            }
+            else
+            {
+                cass_uuid_from_string("00000000-0000-1000-8080-808080808080", &group_id);
+            }
 
             const char *rdata;
             size_t rdataSize;

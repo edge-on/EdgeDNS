@@ -55,8 +55,6 @@ std::string GeoDNS::getCountry(char *ip)
             }
         }
     }
-
-    MMDB_close(&mmdb);
-
+    
     return country;
 }
