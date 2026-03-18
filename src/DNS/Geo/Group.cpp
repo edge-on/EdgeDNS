@@ -228,6 +228,8 @@ void Group::incrementalReload(CassUuid g)
 {
     int count = 0;
 
+    CassUuid v = groups[g].version;
+    
     CassStatement *statement =
         cass_statement_new("SELECT * FROM edgeon.ip_group_versions WHERE group_id = ? AND version > ?;", 2);
 

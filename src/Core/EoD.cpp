@@ -752,7 +752,10 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                                     auto gIt = group_entries.find(rec.group_id);
                                     if (gIt != group_entries.end())
                                     {
-                                        auto defIt = gIt->second.find("DEFAULT");
+                                        std::string countryCode = Static::dns->getCountry(ip_str);
+                                        std::cout << "Code: " << countryCode << std::endl;
+
+                                        auto defIt = gIt->second.find(countryCode);
                                         if (defIt != gIt->second.end() && !defIt->second.empty())
                                         {
                                             CassUuid entry_id = defIt->second[0];
@@ -767,8 +770,26 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
                                                 }
                                             }
                                         }
+                                        else
+                                        {
+                                            auto defIt = gIt->second.find("DEFAULT");
+                                            if (defIt != gIt->second.end() && !defIt->second.empty())
+                                            {
+                                                CassUuid entry_id = defIt->second[0];
+
+                                                auto eIt = entries.find(rec.group_id);
+                                                if (eIt != entries.end())
+                                                {
+                                                    auto ipIt = eIt->second.find(entry_id);
+                                                    if (ipIt != eIt->second.end())
+                                                    {
+                                                        ipW = ipIt->second.ip;
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
-                                    
+
                                     write16(response, ipW.size());
                                     response.insert(response.end(), ipW.begin(), ipW.end());
                                 }
