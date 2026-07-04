@@ -11,6 +11,8 @@
 #include <iomanip>
 #include <vector>
 
+#include "Cache/Mmap.hpp"
+
 #include "Core/Core.hpp"
 
 #include "DNS/RRL.hpp"

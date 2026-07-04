@@ -6,6 +6,9 @@ int main()
 {
     Static::dns->init();
 
+    Mmap *map = new Mmap();
+    map->init("edgedns.db");
+
     Main::cas = new Cassandra();
 
     if (Main::cas->connect())
