@@ -36,5 +36,5 @@ class Main
 {
 public:
     static Cassandra *cas;
-    static inline uint32_t next_zone_id = 1;
+    static Mmap *map;
 };

@@ -385,7 +385,7 @@ std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip
     // ---------------- READ QNAME ----------------
     std::vector<uint8_t> nameWire;
 
-    size_t name_start = offset + 1;
+    size_t name_start = offset;
 
     while (buffer[offset] != 0)
     {
@@ -430,358 +430,189 @@ std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip
         }
     }
 
-    std::string z;
-
-    for (auto c : nameWire)
+    std::vector<DNSResponseData> matched_records;
+    if (Main::map->get_record(nameWire, qtype, matched_records))
     {
-        if (c == 0x3)
-            z.push_back('.');
 
-        z.push_back(c);
+        // ---------------- BUILD RESPONSE ----------------
 
-        printf("%d", c);
-        std::cout << " ";
-    }
-    
-    std::cout << " - " << z << std::endl;
+        /*
+        0 → NOERROR
+        1 → FORMERR
+        2 → SERVFAIL
+        3 → NXDOMAIN
+        4 → NOTIMP
+        5 → REFUSED
+        */
 
-    while (i < nameWire.size() && nameWire[i] != 0)
-    {
-        std::vector<uint8_t> candidate(nameWire.begin() + i, nameWire.end());
+        std::vector<uint8_t> response;
 
-        /*if (zones.find(candidate) != zones.end())
+        write16(response, transaction_id);
+
+        uint16_t response_flags = 0;
+        response_flags |= 0x8000;           // QR
+        response_flags |= (flags & 0x0100); // RD mirror
+        response_flags |= 0x0400;           // AA
+
+        uint16_t anc = 0;
+
+        if (qclass != 1)
         {
-            zoneWire = candidate;
-            break;
-        }*/
+            response_flags |= 0x0004; // NOTIMP
+        }
 
-        if (i + nameWire[i] + 1 > nameWire.size())
-            break;
-
-        i += nameWire[i] + 1;
-    }
-    // ---------------- BUILD RESPONSE ----------------
-
-    /*
-    0 → NOERROR
-    1 → FORMERR
-    2 → SERVFAIL
-    3 → NXDOMAIN
-    4 → NOTIMP
-    5 → REFUSED
-    */
-
-    std::vector<uint8_t> response;
-
-    write16(response, transaction_id);
-
-    uint16_t response_flags = 0;
-    response_flags |= 0x8000;           // QR
-    response_flags |= (flags & 0x0100); // RD mirror
-    response_flags |= 0x0400;           // AA
-
-    uint16_t anc = 0;
-
-    if (qclass != 1)
-    {
-        response_flags |= 0x0004; // NOTIMP
-    }
-
-    if (qdcount != 1)
-    {
-        response_flags |= 0x0001; // FORMER
-    }
-
-    if (qtype != 1)
-    {
-        // response_flags |= 0x0005; // NOTIMP
-    }
-
-    write16(response, response_flags);
-    write16(response, 1); // QDCOUNT
-    write16(response, 0); // ANCOUNT placeholder
-    write16(response, 0); // NSCOUNT
-    write16(response, 0); // ARCOUNT
-
-    // copy question
-    response.insert(response.end(),
-                    buffer + (12),
-                    buffer + question_end);
-
-    // ---------------- ANSWER ----------------
-    if (qclass == 1 && qdcount == 1)
-    {
-        if (!zoneWire.empty())
+        if (qdcount != 1)
         {
-            /*auto zoneIt = zones.find(zoneWire);
-            auto nameIt = zoneIt->second->names.find(nameWire);
+            response_flags |= 0x0001; // FORMER
+        }
 
-            if (nameIt != zoneIt->second->names.end())
+        if (qtype != 1)
+        {
+            // response_flags |= 0x0005; // NOTIMP
+        }
+
+        write16(response, response_flags);
+        write16(response, 1); // QDCOUNT
+        write16(response, 0); // ANCOUNT placeholder
+        write16(response, 0); // NSCOUNT
+        write16(response, 0); // ARCOUNT
+
+        // copy question
+        response.insert(response.end(),
+                        buffer + (12),
+                        buffer + question_end);
+
+        // ---------------- ANSWER ----------------
+        if (qclass == 1 && qdcount == 1)
+        {
+            for (auto &record : matched_records)
             {
-                auto typeIt = nameIt->second.find(qtype);
-
-                if (is_logging)
+                if (is_rrl)
                 {
-                    std::cout << "QTYPE: " << qtype << std::endl;
-                }
+                    RRLKey key;
+                    key.prefix = ip;
+                    key.rcode = 0;
 
-                if (typeIt != nameIt->second.end())
-                {
-                    auto &list = typeIt->second;
+                    uint32_t zone;
+                    memcpy(&zone, nameWire.data(), sizeof(uint32_t));
 
-                    for (size_t i = 0; i < list.size();)
+                    key.zone_id = zone;
+
+                    uint32_t current = now();
+
+                    auto &bucket = thread.rrlBuckets[key];
+
+                    if (bucket.window_start != current)
                     {
-                        auto r_it = records.find(list[i]);
-
-                        if (r_it == records.end())
-                        {
-
-                            list[i] = list.back();
-                            list.pop_back();
-                            continue;
-                        }
-
-                        Record &rec = r_it->second;
-                        UUIDKey record = list[i];
-
-                        if (is_rrl)
-                        {
-                            RRLKey key;
-                            key.prefix = ip;
-                            key.rcode = 0;
-
-                            uint32_t zone;
-                            memcpy(&zone, zoneWire.data(), sizeof(uint32_t));
-
-                            key.zone_id = zone;
-
-                            uint32_t current = now();
-
-                            auto &bucket = thread.rrlBuckets[key];
-
-                            if (bucket.window_start != current)
-                            {
-                                bucket.window_start = current;
-                                bucket.responses = 1;
-                            }
-                            else
-                            {
-                                bucket.responses += 1;
-                            }
-
-                            if (bucket.responses > threshold)
-                            {
-                                truncated = true;
-                            }
-                        }
-
-                        uint16_t udp_limit = edns_class ? edns_class : 512;
-                        size_t rr_size =
-                            2 + // pointer
-                            2 + // type
-                            2 + // class
-                            4 + // ttl
-                            2 + // rdlen
-                            records[record].rdata.size();
-
-                        if (!is_tcp && response.size() + rr_size > udp_limit)
-                        {
-                            truncated = true;
-                        }
-
-                        if (!truncated)
-                        {
-                            write16(response, 0xC00C); // pointer
-                            write16(response, records[record].type);
-                            write16(response, 1); // IN (qclass)
-                            write32(response, records[record].ttl);
-
-                            if (qtype == 15)
-                            {
-                                std::vector<uint8_t> rdata;
-
-                                write16(rdata, records[record].priority);
-                                rdata.insert(rdata.end(), records[record].rdata.begin(), records[record].rdata.end());
-
-                                write16(response, rdata.size());
-
-                                response.insert(response.end(),
-                                                rdata.begin(),
-                                                rdata.end());
-                            }
-                            else if (records[record].type == 16)
-                            {
-                                write16(response, static_cast<uint16_t>(records[record].rdata.size()));
-
-                                response.insert(response.end(), records[record].rdata.begin(), records[record].rdata.end());
-                            }
-                            else
-                            {
-                                if (rec.isProxy)
-                                {
-
-                                    if (qtype == 1)
-                                    {
-                                        std::vector<uint8_t> ipW = {};
-
-                                        auto gIt = group_entries.find(Proxy::proxy_group_id);
-                                        if (gIt != group_entries.end())
-                                        {
-                                            std::string countryCode = Static::dns->getCountry(ip_str);
-
-                                            auto defIt = gIt->second.find(countryCode);
-                                            if (defIt != gIt->second.end() && !defIt->second.empty())
-                                            {
-                                                CassUuid entry_id = defIt->second[0];
-
-                                                auto eIt = entries.find(Proxy::proxy_group_id);
-                                                if (eIt != entries.end())
-                                                {
-                                                    auto ipIt = eIt->second.find(entry_id);
-                                                    if (ipIt != eIt->second.end())
-                                                    {
-                                                        ipW = ipIt->second.ip;
-                                                    }
-                                                }
-                                            }
-                                            else
-                                            {
-                                                auto defIt = gIt->second.find("DEFAULT");
-                                                if (defIt != gIt->second.end() && !defIt->second.empty())
-                                                {
-                                                    CassUuid entry_id = defIt->second[0];
-
-                                                    auto eIt = entries.find(Proxy::proxy_group_id);
-                                                    if (eIt != entries.end())
-                                                    {
-                                                        auto ipIt = eIt->second.find(entry_id);
-                                                        if (ipIt != eIt->second.end())
-                                                        {
-                                                            ipW = ipIt->second.ip;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        write16(response, ipW.size());
-                                        response.insert(response.end(), ipW.begin(), ipW.end());
-                                    }
-                                }
-                                else
-                                {
-                                    if (rec.isGeo)
-                                    {
-                                        if (qtype == 1)
-                                        {
-                                            std::vector<uint8_t> ipW = {};
-
-                                            auto gIt = group_entries.find(rec.group_id);
-                                            if (gIt != group_entries.end())
-                                            {
-                                                std::string countryCode = Static::dns->getCountry(ip_str);
-
-                                                auto defIt = gIt->second.find(countryCode);
-                                                if (defIt != gIt->second.end() && !defIt->second.empty())
-                                                {
-                                                    CassUuid entry_id = defIt->second[0];
-
-                                                    auto eIt = entries.find(rec.group_id);
-                                                    if (eIt != entries.end())
-                                                    {
-                                                        auto ipIt = eIt->second.find(entry_id);
-                                                        if (ipIt != eIt->second.end())
-                                                        {
-                                                            ipW = ipIt->second.ip;
-                                                        }
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    auto defIt = gIt->second.find("DEFAULT");
-                                                    if (defIt != gIt->second.end() && !defIt->second.empty())
-                                                    {
-                                                        CassUuid entry_id = defIt->second[0];
-
-                                                        auto eIt = entries.find(rec.group_id);
-                                                        if (eIt != entries.end())
-                                                        {
-                                                            auto ipIt = eIt->second.find(entry_id);
-                                                            if (ipIt != eIt->second.end())
-                                                            {
-                                                                ipW = ipIt->second.ip;
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            write16(response, ipW.size());
-                                            response.insert(response.end(), ipW.begin(), ipW.end());
-                                        }
-                                    }
-                                    else
-                                    {
-                                        write16(response, records[record].rdata.size());
-
-                                        response.insert(response.end(),
-                                                        records[record].rdata.begin(),
-                                                        records[record].rdata.end());
-                                    }
-                                }
-                            }
-
-                            anc++;
-                        }
-
-                        i++;
+                        bucket.window_start = current;
+                        bucket.responses = 1;
+                    }
+                    else
+                    {
+                        bucket.responses += 1;
                     }
 
-                    if (anc == 0)
+                    if (bucket.responses > threshold)
                     {
-                        // NOERROR, empty answer
+                        truncated = true;
                     }
                 }
-            }
-            else
-            {
+
+                uint16_t udp_limit = edns_class ? edns_class : 512;
+                size_t rr_size =
+                    2 + // pointer
+                    2 + // type
+                    2 + // class
+                    4 + // ttl
+                    2 + // rdlen
+                    record.rdata.size();
+
+                for (auto c : record.rdata)
+                {
+                    printf("%d", c);
+                    std::cout << " ";
+                }
+
+                std::cout << std::endl;
+
+                if (!is_tcp && response.size() + rr_size > udp_limit)
+                {
+                    truncated = true;
+                }
+
                 if (!truncated)
                 {
-                    response_flags |= 0x0003; // NXDOMAIN
+                    write16(response, 0xC00C); // pointer
+                    write16(response, qtype);
+                    write16(response, 1); // IN (qclass)
+                    write32(response, record.ttl);
+
+                    if (qtype == 15)
+                    {
+                        std::vector<uint8_t> rdata;
+
+                        write16(rdata, record.priority);
+                        rdata.insert(rdata.end(), record.rdata.begin(), record.rdata.end());
+
+                        write16(response, rdata.size());
+
+                        response.insert(response.end(),
+                                        rdata.begin(),
+                                        rdata.end());
+                    }
+                    else if (qtype == 16)
+                    {
+                        write16(response, static_cast<uint16_t>(record.rdata.size()));
+
+                        response.insert(response.end(), record.rdata.begin(), record.rdata.end());
+                    }
+                    else
+                    {
+                        write16(response, record.rdata.size());
+
+                        response.insert(response.end(),
+                                        record.rdata.begin(),
+                                        record.rdata.end());
+                    }
+
+                    anc++;
                 }
-            }*/
-        }
-        else
-        {
-            if (!truncated)
+
+                i++;
+            }
+
+            if (anc == 0)
             {
-                response_flags |= 0x0005; // REFUSED
+                // NOERROR, empty answer
             }
         }
+
+        if (truncated)
+        {
+            response_flags |= 0x0200; // TC (TCP) Truncated
+        }
+
+        // ---------------- FIX HEADER ----------------
+        response[6] = (anc >> 8) & 0xFF;
+        response[7] = anc & 0xFF;
+
+        response[2] = (response_flags >> 8) & 0xFF;
+        response[3] = response_flags & 0xFF;
+
+        response[10] = 0;
+        response[11] = 1;
+
+        response.push_back(0);   // Name: . (Root)
+        write16(response, 41);   // Type: OPT (EDNS0)
+        write16(response, 4096); // Payload size: 4096
+        write32(response, 0);    // TTL: 0
+        write16(response, 0);    // RDLEN: 0
+
+        return response;
     }
 
-    if (truncated)
-    {
-        response_flags |= 0x0200; // TC (TCP) Truncated
-    }
-
-    // ---------------- FIX HEADER ----------------
-    response[6] = (anc >> 8) & 0xFF;
-    response[7] = anc & 0xFF;
-
-    response[2] = (response_flags >> 8) & 0xFF;
-    response[3] = response_flags & 0xFF;
-
-    response[10] = 0;
-    response[11] = 1;
-
-    response.push_back(0);   // Name: . (Root)
-    write16(response, 41);   // Type: OPT (EDNS0)
-    write16(response, 4096); // Payload size: 4096
-    write32(response, 0);    // TTL: 0
-    write16(response, 0);    // RDLEN: 0
-
-    return response;
+    // Go To DB, Take the data and append to mmap
+    std::string zone = Utils::Vector::wireToDomain(nameWire.data(), sizeof(nameWire));
 }
 
 void Core::enableWrite(int fd, int epoll_fd)
