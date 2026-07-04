@@ -445,6 +445,11 @@ std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip
         std::string zone = Utils::Vector::wireToDomain(zoneData.data(), zoneData.size());
 
         matched_records = DB::Record::getRecord(zone, name, qtype);
+
+        for (auto &rec : matched_records)
+        {
+            Main::map->append_record(nameWire, qtype, rec.ttl, rec.priority, rec.rdata);
+        }
     }
 
     // ---------------- BUILD RESPONSE ----------------
