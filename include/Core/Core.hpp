@@ -23,9 +23,7 @@
 
 #include <atomic>
 
-#include "DNS/DNS.hpp"
 #include "DNS/RRL.hpp"
-#include "DNS/Zone.hpp"
 
 #include "Global/Static.hpp"
 

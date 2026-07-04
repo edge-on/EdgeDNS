@@ -13,9 +13,7 @@
 
 #include "Core/Core.hpp"
 
-#include "DNS/DNS.hpp"
 #include "DNS/RRL.hpp"
-#include "DNS/Zone.hpp"
 
 #include "Cassandra/Cassandra.hpp"
 

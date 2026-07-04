@@ -385,7 +385,7 @@ std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip
     // ---------------- READ QNAME ----------------
     std::vector<uint8_t> nameWire;
 
-    size_t name_start = offset;
+    size_t name_start = offset + 1;
 
     while (buffer[offset] != 0)
     {
@@ -430,15 +430,30 @@ std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip
         }
     }
 
+    std::string z;
+
+    for (auto c : nameWire)
+    {
+        if (c == 0x3)
+            z.push_back('.');
+
+        z.push_back(c);
+
+        printf("%d", c);
+        std::cout << " ";
+    }
+    
+    std::cout << " - " << z << std::endl;
+
     while (i < nameWire.size() && nameWire[i] != 0)
     {
         std::vector<uint8_t> candidate(nameWire.begin() + i, nameWire.end());
 
-        if (zones.find(candidate) != zones.end())
+        /*if (zones.find(candidate) != zones.end())
         {
             zoneWire = candidate;
             break;
-        }
+        }*/
 
         if (i + nameWire[i] + 1 > nameWire.size())
             break;
@@ -498,7 +513,7 @@ std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip
     {
         if (!zoneWire.empty())
         {
-            auto zoneIt = zones.find(zoneWire);
+            /*auto zoneIt = zones.find(zoneWire);
             auto nameIt = zoneIt->second->names.find(nameWire);
 
             if (nameIt != zoneIt->second->names.end())
@@ -734,7 +749,7 @@ std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip
                 {
                     response_flags |= 0x0003; // NXDOMAIN
                 }
-            }
+            }*/
         }
         else
         {
