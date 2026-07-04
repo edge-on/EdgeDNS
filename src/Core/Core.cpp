@@ -443,6 +443,8 @@ std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip
         // Go To DB, Take the data and append to mmap
         std::string name = Utils::Vector::wireToDomain(nameWire.data(), sizeof(nameWire));
         std::string zone = Utils::Vector::wireToDomain(zoneData.data(), zoneData.size());
+
+        matched_records = DB::Record::getRecord(zone, name, qtype);
     }
 
     // ---------------- BUILD RESPONSE ----------------

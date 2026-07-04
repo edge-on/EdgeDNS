@@ -29,6 +29,8 @@
 
 #include "DNS/Proxy/Proxy.hpp"
 
+#include "Cassandra/Record.hpp"
+
 class Core
 {
 public:
