@@ -27,17 +27,15 @@
 #include "DNS/RRL.hpp"
 #include "DNS/Zone.hpp"
 
-#include "Core/IPC/IPC.hpp"
-
 #include "Global/Static.hpp"
 
 #include "DNS/Proxy/Proxy.hpp"
 
-class EoD
+class Core
 {
 public:
-    EoD();
-    ~EoD();
+    Core();
+    ~Core();
 
     struct Connection
     {
@@ -82,9 +80,6 @@ public:
     void initTCP(Thread &th);
     void handleTCP(Connection &conn, Thread &th);
     void writeTCP(Connection &conn, Thread &th);
-
-    void initIPC();
-    void handleIPC(int fd);
 
     void enableWrite(int fd, int epoll_fd);
     void disableWrite(int fd, int epoll_fd);

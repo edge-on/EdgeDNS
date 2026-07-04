@@ -1,14 +1,14 @@
-#include "Core/EoD.hpp"
+#include "Core/Core.hpp"
 
-EoD::EoD() : activeThreads({})
+Core::Core() : activeThreads({})
 {
 }
 
-EoD::~EoD()
+Core::~Core()
 {
 }
 
-void EoD::start()
+void Core::start()
 {
     threadCount = std::thread::hardware_concurrency();
 
@@ -16,21 +16,17 @@ void EoD::start()
 
     for (int i = 0; i < threadCount; ++i)
     {
-        threads.emplace_back(&EoD::worker, this, i);
+        threads.emplace_back(&Core::worker, this, i);
         activeThreads[i].id = threads[i].get_id();
     }
-
-    std::thread ipc_thread = std::thread(&EoD::initIPC, this);
 
     for (auto &t : threads)
     {
         t.join();
     }
-
-    ipc_thread.join();
 }
 
-void EoD::worker(int th)
+void Core::worker(int th)
 {
     Thread &thread = activeThreads[th];
 
@@ -117,7 +113,7 @@ void EoD::worker(int th)
     }
 }
 
-void EoD::initUDP(Thread &thread)
+void Core::initUDP(Thread &thread)
 {
     thread.eod_udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -154,7 +150,7 @@ void EoD::initUDP(Thread &thread)
     std::cout << "UDP Socket Initalized On Thread " << thread.id << ".\n";
 }
 
-void EoD::handleUDP(Thread &thread)
+void Core::handleUDP(Thread &thread)
 {
     constexpr int BATCH = 256;
     constexpr int BUF_SIZE = 4096;
@@ -227,7 +223,7 @@ void EoD::handleUDP(Thread &thread)
     (void)sent;
 }
 
-void EoD::initTCP(Thread &thread)
+void Core::initTCP(Thread &thread)
 {
     thread.eod_tcp_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -269,7 +265,7 @@ void EoD::initTCP(Thread &thread)
     std::cout << "TCP Socket Initalized On Thread " << thread.id << ".\n";
 }
 
-void EoD::handleTCP(Connection &conn, Thread &thread)
+void Core::handleTCP(Connection &conn, Thread &thread)
 {
     uint8_t temp[4096];
     ssize_t n = read(conn.fd, temp, sizeof(temp));
@@ -322,7 +318,7 @@ void EoD::handleTCP(Connection &conn, Thread &thread)
     }
 }
 
-void EoD::writeTCP(Connection &conn, Thread &thread)
+void Core::writeTCP(Connection &conn, Thread &thread)
 {
     while (!conn.writeBuffer.empty())
     {
@@ -346,146 +342,7 @@ void EoD::writeTCP(Connection &conn, Thread &thread)
     disableWrite(conn.fd, thread.epoll_fd);
 }
 
-void EoD::initIPC()
-{
-    eod_ipc_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-
-    if (eod_ipc_fd < 0)
-    {
-        perror("eod_ipc_fd socket");
-    }
-
-    sockaddr_un addr{};
-    addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, "/run/eod.sock");
-
-    unlink("/run/eod.sock");
-
-    if (bind(eod_ipc_fd, (sockaddr *)&addr, sizeof(addr)) < 0)
-    {
-        perror("eod_ipc_fd bind");
-    }
-
-    if (listen(eod_ipc_fd, SOMAXCONN) < 0)
-    {
-        perror("eod_ipc_fd listen");
-    }
-
-    std::cout << "IPC Socket Initalized.\n";
-
-    while (true)
-    {
-        int client_fd = accept(eod_ipc_fd, nullptr, nullptr);
-        if (client_fd >= 0)
-        {
-            std::thread([this, client_fd]()
-                        {
-                            handleIPC(client_fd);
-                            close(client_fd); })
-                .detach();
-        }
-    }
-}
-
-void EoD::handleIPC(int fd)
-{
-    std::vector<uint8_t> buffer(1024);
-
-    read(fd, buffer.data(), buffer.size());
-
-    int offset = 0;
-    uint8_t type = buffer[offset];
-    offset++;
-
-    uint8_t code = buffer[offset];
-    offset++;
-
-    if (type == IPC::GROUP)
-    {
-        if (code == IPC::Commands::RELOAD)
-        {
-            std::vector<uint8_t> response;
-            response.push_back(IPC::Commands::DONE);
-
-            std::string param = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
-
-            CassUuid uuid;
-            cass_uuid_from_string(param.c_str(), &uuid);
-
-            Group::fullReload(uuid);
-
-            send(fd, response.data(), response.size(), 0);
-        }
-        else if (code == IPC::Commands::INCREMENTAL)
-        {
-            std::vector<uint8_t> response;
-            response.push_back(IPC::Commands::DONE);
-
-            std::string param = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
-
-            CassUuid uuid;
-            cass_uuid_from_string(param.c_str(), &uuid);
-
-            Group::incrementalReload(uuid);
-
-            send(fd, response.data(), response.size(), 0);
-        }
-    }
-    else if (type == IPC::ZONE)
-    {
-        if (code == IPC::Commands::RELOAD)
-        {
-            std::vector<uint8_t> response;
-            response.push_back(IPC::Commands::DONE);
-
-            std::string zone = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
-            DNS::reloadZone(zone);
-
-            if (is_logging)
-            {
-                std::cout << "Zone " << zone << " Reloaded!" << std::endl;
-            }
-
-            send(fd, response.data(), response.size(), 0);
-        }
-        else if (code == IPC::Commands::INCREMENTAL)
-        {
-            std::vector<uint8_t> response;
-            response.push_back(IPC::Commands::DONE);
-
-            std::string zone = Utils::Vector::wireToDomain(buffer.data() + offset, buffer.size() - offset);
-
-            auto it = zones.find(Utils::Vector::stringToWire(zone, true));
-            if (it != zones.end())
-            {
-                int reloadedCount = DNS::incrementalReloadZone(zone, it->second->version);
-
-                if (is_logging)
-                {
-                    std::cout << reloadedCount << " records reloaded in " << zone << "!" << std::endl;
-                }
-
-                send(fd, response.data(), response.size(), 0);
-            }
-            else
-            {
-                CassUuid uuid;
-                cass_uuid_from_string("00000000-0000-1000-8080-808080808080", &uuid);
-
-                int reloadedCount = DNS::incrementalReloadZone(zone, uuid);
-
-                if (is_logging)
-                {
-                    std::cout << reloadedCount << " records reloaded in " << zone << "!" << std::endl;
-                }
-
-                send(fd, response.data(), response.size(), 0);
-            }
-        }
-    }
-}
-
-std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, char *ip_str, Thread &thread)
+std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, char *ip_str, Thread &thread)
 {
     if (is_logging)
     {
@@ -912,7 +769,7 @@ std::vector<uint8_t> EoD::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip,
     return response;
 }
 
-void EoD::enableWrite(int fd, int epoll_fd)
+void Core::enableWrite(int fd, int epoll_fd)
 {
     epoll_event ev{};
     ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
@@ -921,7 +778,7 @@ void EoD::enableWrite(int fd, int epoll_fd)
     epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev);
 }
 
-void EoD::disableWrite(int fd, int epoll_fd)
+void Core::disableWrite(int fd, int epoll_fd)
 {
     epoll_event ev{};
     ev.events = EPOLLIN | EPOLLET;
@@ -930,7 +787,7 @@ void EoD::disableWrite(int fd, int epoll_fd)
     epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev);
 }
 
-int EoD::makeNonBlocking(int sfd)
+int Core::makeNonBlocking(int sfd)
 {
     int flags = fcntl(sfd, F_GETFL, 0);
     if (flags == -1)
@@ -939,7 +796,7 @@ int EoD::makeNonBlocking(int sfd)
     return fcntl(sfd, F_SETFL, flags);
 }
 
-void EoD::write32(std::vector<uint8_t> &buf, uint32_t value)
+void Core::write32(std::vector<uint8_t> &buf, uint32_t value)
 {
     uint32_t net = htonl(value);
     uint8_t *p = (uint8_t *)&net;
@@ -949,7 +806,7 @@ void EoD::write32(std::vector<uint8_t> &buf, uint32_t value)
     buf.push_back(p[3]);
 }
 
-void EoD::write16(std::vector<uint8_t> &buf, uint16_t value)
+void Core::write16(std::vector<uint8_t> &buf, uint16_t value)
 {
     uint16_t net = htons(value);
     uint8_t *p = (uint8_t *)&net;
@@ -957,12 +814,12 @@ void EoD::write16(std::vector<uint8_t> &buf, uint16_t value)
     buf.push_back(p[1]);
 }
 
-uint32_t EoD::now()
+uint32_t Core::now()
 {
     return g_second.load(std::memory_order_relaxed);
 }
 
-void EoD::start_clock_thread()
+void Core::start_clock_thread()
 {
     std::thread([&]
                 {

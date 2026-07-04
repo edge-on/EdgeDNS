@@ -11,7 +11,7 @@
 #include <iomanip>
 #include <vector>
 
-#include "Core/EoD.hpp"
+#include "Core/Core.hpp"
 
 #include "DNS/DNS.hpp"
 #include "DNS/RRL.hpp"
