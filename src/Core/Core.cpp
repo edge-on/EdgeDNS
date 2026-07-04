@@ -430,189 +430,183 @@ std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip
         }
     }
 
+    std::vector<uint8_t> response;
+
+    uint16_t response_flags = 0;
+    uint16_t anc = 0;
+
+    std::vector<uint8_t> zoneData = Utils::Vector::getHostWireFromWire(nameWire.data(), nameWire.size());
+
     std::vector<DNSResponseData> matched_records;
-    if (Main::map->get_record(nameWire, qtype, matched_records))
+    if (!Main::map->get_record(nameWire, qtype, matched_records))
     {
+        // Go To DB, Take the data and append to mmap
+        std::string name = Utils::Vector::wireToDomain(nameWire.data(), sizeof(nameWire));
+        std::string zone = Utils::Vector::wireToDomain(zoneData.data(), zoneData.size());
+    }
 
-        // ---------------- BUILD RESPONSE ----------------
+    // ---------------- BUILD RESPONSE ----------------
 
-        /*
-        0 → NOERROR
-        1 → FORMERR
-        2 → SERVFAIL
-        3 → NXDOMAIN
-        4 → NOTIMP
-        5 → REFUSED
-        */
+    /*
+    0 → NOERROR
+    1 → FORMERR
+    2 → SERVFAIL
+    3 → NXDOMAIN
+    4 → NOTIMP
+    5 → REFUSED
+    */
 
-        std::vector<uint8_t> response;
+    write16(response, transaction_id);
 
-        write16(response, transaction_id);
+    response_flags |= 0x8000;           // QR
+    response_flags |= (flags & 0x0100); // RD mirror
+    response_flags |= 0x0400;           // AA
 
-        uint16_t response_flags = 0;
-        response_flags |= 0x8000;           // QR
-        response_flags |= (flags & 0x0100); // RD mirror
-        response_flags |= 0x0400;           // AA
+    if (qclass != 1)
+    {
+        response_flags |= 0x0004; // NOTIMP
+    }
 
-        uint16_t anc = 0;
+    if (qdcount != 1)
+    {
+        response_flags |= 0x0001; // FORMER
+    }
 
-        if (qclass != 1)
+    if (qtype != 1)
+    {
+        // response_flags |= 0x0005; // NOTIMP
+    }
+
+    write16(response, response_flags);
+    write16(response, 1); // QDCOUNT
+    write16(response, 0); // ANCOUNT placeholder
+    write16(response, 0); // NSCOUNT
+    write16(response, 0); // ARCOUNT
+
+    // copy question
+    response.insert(response.end(),
+                    buffer + (12),
+                    buffer + question_end);
+
+    // ---------------- ANSWER ----------------
+    if (qclass == 1 && qdcount == 1)
+    {
+        for (auto &record : matched_records)
         {
-            response_flags |= 0x0004; // NOTIMP
-        }
-
-        if (qdcount != 1)
-        {
-            response_flags |= 0x0001; // FORMER
-        }
-
-        if (qtype != 1)
-        {
-            // response_flags |= 0x0005; // NOTIMP
-        }
-
-        write16(response, response_flags);
-        write16(response, 1); // QDCOUNT
-        write16(response, 0); // ANCOUNT placeholder
-        write16(response, 0); // NSCOUNT
-        write16(response, 0); // ARCOUNT
-
-        // copy question
-        response.insert(response.end(),
-                        buffer + (12),
-                        buffer + question_end);
-
-        // ---------------- ANSWER ----------------
-        if (qclass == 1 && qdcount == 1)
-        {
-            for (auto &record : matched_records)
+            if (is_rrl)
             {
-                if (is_rrl)
+                RRLKey key;
+                key.prefix = ip;
+                key.rcode = 0;
+
+                uint32_t zone;
+                memcpy(&zone, zoneData.data(), sizeof(uint32_t));
+
+                key.zone_id = zone;
+
+                uint32_t current = now();
+
+                auto &bucket = thread.rrlBuckets[key];
+
+                if (bucket.window_start != current)
                 {
-                    RRLKey key;
-                    key.prefix = ip;
-                    key.rcode = 0;
-
-                    uint32_t zone;
-                    memcpy(&zone, nameWire.data(), sizeof(uint32_t));
-
-                    key.zone_id = zone;
-
-                    uint32_t current = now();
-
-                    auto &bucket = thread.rrlBuckets[key];
-
-                    if (bucket.window_start != current)
-                    {
-                        bucket.window_start = current;
-                        bucket.responses = 1;
-                    }
-                    else
-                    {
-                        bucket.responses += 1;
-                    }
-
-                    if (bucket.responses > threshold)
-                    {
-                        truncated = true;
-                    }
+                    bucket.window_start = current;
+                    bucket.responses = 1;
+                }
+                else
+                {
+                    bucket.responses += 1;
                 }
 
-                uint16_t udp_limit = edns_class ? edns_class : 512;
-                size_t rr_size =
-                    2 + // pointer
-                    2 + // type
-                    2 + // class
-                    4 + // ttl
-                    2 + // rdlen
-                    record.rdata.size();
-
-                for (auto c : record.rdata)
-                {
-                    printf("%d", c);
-                    std::cout << " ";
-                }
-
-                std::cout << std::endl;
-
-                if (!is_tcp && response.size() + rr_size > udp_limit)
+                if (bucket.responses > threshold)
                 {
                     truncated = true;
                 }
+            }
 
-                if (!truncated)
+            uint16_t udp_limit = edns_class ? edns_class : 512;
+            size_t rr_size =
+                2 + // pointer
+                2 + // type
+                2 + // class
+                4 + // ttl
+                2 + // rdlen
+                record.rdata.size();
+
+            if (!is_tcp && response.size() + rr_size > udp_limit)
+            {
+                truncated = true;
+            }
+
+            if (!truncated)
+            {
+                write16(response, 0xC00C); // pointer
+                write16(response, qtype);
+                write16(response, 1); // IN (qclass)
+                write32(response, record.ttl);
+
+                if (qtype == 15)
                 {
-                    write16(response, 0xC00C); // pointer
-                    write16(response, qtype);
-                    write16(response, 1); // IN (qclass)
-                    write32(response, record.ttl);
+                    std::vector<uint8_t> rdata;
 
-                    if (qtype == 15)
-                    {
-                        std::vector<uint8_t> rdata;
+                    write16(rdata, record.priority);
+                    rdata.insert(rdata.end(), record.rdata.begin(), record.rdata.end());
 
-                        write16(rdata, record.priority);
-                        rdata.insert(rdata.end(), record.rdata.begin(), record.rdata.end());
+                    write16(response, rdata.size());
 
-                        write16(response, rdata.size());
+                    response.insert(response.end(),
+                                    rdata.begin(),
+                                    rdata.end());
+                }
+                else if (qtype == 16)
+                {
+                    write16(response, static_cast<uint16_t>(record.rdata.size()));
 
-                        response.insert(response.end(),
-                                        rdata.begin(),
-                                        rdata.end());
-                    }
-                    else if (qtype == 16)
-                    {
-                        write16(response, static_cast<uint16_t>(record.rdata.size()));
+                    response.insert(response.end(), record.rdata.begin(), record.rdata.end());
+                }
+                else
+                {
+                    write16(response, record.rdata.size());
 
-                        response.insert(response.end(), record.rdata.begin(), record.rdata.end());
-                    }
-                    else
-                    {
-                        write16(response, record.rdata.size());
-
-                        response.insert(response.end(),
-                                        record.rdata.begin(),
-                                        record.rdata.end());
-                    }
-
-                    anc++;
+                    response.insert(response.end(),
+                                    record.rdata.begin(),
+                                    record.rdata.end());
                 }
 
-                i++;
+                anc++;
             }
 
-            if (anc == 0)
-            {
-                // NOERROR, empty answer
-            }
+            i++;
         }
 
-        if (truncated)
+        if (anc == 0)
         {
-            response_flags |= 0x0200; // TC (TCP) Truncated
+            // NOERROR, empty answer
         }
-
-        // ---------------- FIX HEADER ----------------
-        response[6] = (anc >> 8) & 0xFF;
-        response[7] = anc & 0xFF;
-
-        response[2] = (response_flags >> 8) & 0xFF;
-        response[3] = response_flags & 0xFF;
-
-        response[10] = 0;
-        response[11] = 1;
-
-        response.push_back(0);   // Name: . (Root)
-        write16(response, 41);   // Type: OPT (EDNS0)
-        write16(response, 4096); // Payload size: 4096
-        write32(response, 0);    // TTL: 0
-        write16(response, 0);    // RDLEN: 0
-
-        return response;
     }
 
-    // Go To DB, Take the data and append to mmap
-    std::string zone = Utils::Vector::wireToDomain(nameWire.data(), sizeof(nameWire));
+    if (truncated)
+    {
+        response_flags |= 0x0200; // TC (TCP) Truncated
+    }
+
+    // ---------------- FIX HEADER ----------------
+    response[6] = (anc >> 8) & 0xFF;
+    response[7] = anc & 0xFF;
+
+    response[2] = (response_flags >> 8) & 0xFF;
+    response[3] = response_flags & 0xFF;
+
+    response[10] = 0;
+    response[11] = 1;
+
+    response.push_back(0);   // Name: . (Root)
+    write16(response, 41);   // Type: OPT (EDNS0)
+    write16(response, 4096); // Payload size: 4096
+    write32(response, 0);    // TTL: 0
+    write16(response, 0);    // RDLEN: 0
+
+    return response;
 }
 
 void Core::enableWrite(int fd, int epoll_fd)

@@ -153,5 +153,35 @@ namespace Utils
                 (uint8_t)(val >> 8),
                 (uint8_t)(val)};
         };
+
+        static std::vector<uint8_t> getHostWireFromWire(const uint8_t *wire, size_t wire_size)
+        {
+            if (wire_size == 0 || wire[0] == 0)
+                return {};
+
+            size_t label_indices[16];
+            size_t label_count = 0;
+            size_t i = 0;
+
+            while (i < wire_size && wire[i] != 0 && label_count < 16)
+            {
+                label_indices[label_count++] = i;
+                i += wire[i] + 1;
+            }
+
+            size_t start_idx = 0;
+            if (label_count > 2)
+            {
+                start_idx = label_indices[label_count - 2];
+            }
+
+            size_t result_size = wire_size - start_idx;
+
+            std::vector<uint8_t> result;
+            result.reserve(result_size);
+            result.assign(wire + start_idx, wire + wire_size);
+
+            return result;
+        }
     };
 } // namespace Utils
