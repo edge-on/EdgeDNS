@@ -24,12 +24,16 @@
 
 #include <atomic>
 
+#include <liburing/io_uring.h>
+
 #include "Global/Static.hpp"
 #include "DNS/Proxy/Proxy.hpp"
 #include "Cassandra/Record.hpp"
 #include "Core/Thread/Operational.hpp"
 
 #include "Core/Gen/Gen.hpp"
+
+#include "Core/Uring/Pipeline.hpp"
 
 class Core
 {
@@ -47,13 +51,14 @@ public:
     void worker(int th);
 
     void initUDP(Gen::Thread &th);
+    void initTCP(Gen::Thread &th);
+
     void handleUDP(Gen::Thread &th);
 
-    void initTCP(Gen::Thread &th);
     void handleTCP(Gen::Connection &conn, Gen::Thread &th);
     void writeTCP(Gen::Connection &conn, Gen::Thread &th);
 
-    std::vector<uint8_t> handle(std::vector<uint8_t> data, bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread);
+    std::vector<uint8_t> handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread);
 
     std::atomic<uint32_t> g_second;
     uint32_t now();

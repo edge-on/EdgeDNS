@@ -10,6 +10,7 @@ void Operational::addQueue(const std::vector<uint8_t> &name, int qtype, int ttl,
     record.ttl = ttl;
     record.prio = prio;
     record.val = val;
+    record.type = ADD;
 
     queue.emplace_back(std::move(record));
 }

@@ -7,6 +7,10 @@
 
 #include "DNS/RRL.hpp"
 
+#include <list>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 #define QUEUE_DEPTH 8192
 
 class Gen
@@ -24,6 +28,8 @@ public:
 
         std::vector<uint8_t> readBuffer;
         std::vector<uint8_t> writeBuffer;
+
+        struct msghdr msgHdr{};
 
         uint16_t expectedLength = 0;
     } Connection;
@@ -57,5 +63,15 @@ public:
     {
         UDP,
         TCP
+    };
+
+    struct Context
+    {
+        int fd;
+        std::vector<uint8_t> writeBuffer;
+        sockaddr_storage peerAddr;
+        socklen_t peerLen;
+        iovec iov;
+        msghdr msgHdr;
     };
 };

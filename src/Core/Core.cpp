@@ -54,6 +54,12 @@ void Core::initUDP(Gen::Thread &thread)
         perror("eod bind");
     }
 
+    Gen::Connection conn;
+    conn.fd = thread.udpFd;
+    conn.type = Gen::UDP;
+
+    thread.connections[thread.udpFd] = std::move(conn);
+
     std::lock_guard<std::mutex> lock(coutMutex);
     std::cout << "UDP Socket Initalized On Thread " << thread.id << ".\n";
 }
@@ -102,8 +108,14 @@ void Core::worker(int th)
         return;
     }
 
+    Pipeline *pipeline = new Pipeline();
+    pipeline->init(th);
+
     initUDP(thread);
     initTCP(thread);
+
+    pipeline->queueRead(thread.connections[thread.udpFd]);
+    pipeline->queueMultishotAccept(thread.tcpFd);
 
     io_uring_submit(ring);
 
@@ -115,6 +127,17 @@ void Core::worker(int th)
             break;
 
         uint64_t data = (uint64_t)io_uring_cqe_get_data(cqe);
+
+        if (data & (1ULL << 63))
+        {
+            Gen::Context *ctx = (Gen::Context *)(data & ~(1ULL << 63));
+            if (cqe->res < 0)
+                std::cerr << "sendmsg failed: " << strerror(-cqe->res) << std::endl;
+            delete ctx;
+            io_uring_cqe_seen(ring, cqe);
+            continue;
+        }
+
         int fd = (int)(data & 0xFFFFFFFF);
         int type = (int)(data >> 32);
 
@@ -129,7 +152,7 @@ void Core::worker(int th)
 
         if (type == Gen::STATE_MULTISHOT_ACCEPT)
         {
-            int t = fd == thread.tcpFd ? Gen::TCP : Gen::UDP;
+            int t = Gen::TCP;
             int clientFd = res;
 
             Gen::Connection conn;
@@ -155,7 +178,7 @@ void Core::worker(int th)
                 }
 
                 conn.ip_str = ip_str;
-                // std::cout << ip_str << std::endl;
+                std::cout << ip_str << std::endl;
             }
 
             thread.connections[clientFd] = std::move(conn);
@@ -177,10 +200,65 @@ void Core::worker(int th)
             {
             case Gen::TCP:
                 break;
-
             case Gen::UDP:
-                handleUDP(thread);
+            {
+                int buf_id = cqe->flags >> IORING_CQE_BUFFER_SHIFT;
+                char *raw = pipeline->pool->getBufferAddress(buf_id);
+                size_t buf_size = pipeline->pool->getBufferSize();
+
+                if (cqe->res < 0)
+                {
+                    std::cerr << "recvmsg failed: " << strerror(-cqe->res) << std::endl;
+                    pipeline->pool->releaseBuffer(buf_id);
+                    break;
+                }
+
+                struct io_uring_recvmsg_out *o = io_uring_recvmsg_validate(raw, cqe->res, &conn.msgHdr);
+                if (!o)
+                {
+                    pipeline->pool->releaseBuffer(buf_id);
+                    break;
+                }
+
+                void *payload = io_uring_recvmsg_payload(o, &conn.msgHdr);
+                size_t payload_len = io_uring_recvmsg_payload_length(o, cqe->res, &conn.msgHdr);
+
+                uint8_t queryBuf[512];
+                size_t queryLen = std::min(payload_len, sizeof(queryBuf));
+                memcpy(queryBuf, payload, queryLen);
+
+                pipeline->pool->releaseBuffer(buf_id);
+
+                sockaddr_storage peerAddr;
+                memcpy(&peerAddr, io_uring_recvmsg_name(o), o->namelen);
+                socklen_t peerLen = o->namelen;
+
+                char ipStr[INET6_ADDRSTRLEN] = {0};
+                if (peerAddr.ss_family == AF_INET)
+                    inet_ntop(AF_INET, &((sockaddr_in *)&peerAddr)->sin_addr, ipStr, sizeof(ipStr));
+
+                Gen::Context *ctx = new Gen::Context();
+                ctx->fd = conn.fd;
+                memcpy(&ctx->peerAddr, &peerAddr, peerLen);
+                ctx->peerLen = peerLen;
+
+                auto data = handle(queryBuf, false,
+                                   ((sockaddr_in *)&peerAddr)->sin_addr.s_addr,
+                                   ipStr, thread);
+
+                ctx->iov.iov_base = data.data();
+                ctx->iov.iov_len = data.size();
+                
+                pipeline->queueWrite(ctx);
+                io_uring_submit(ring);
                 break;
+            }
+            }
+
+            if (!(cqe->flags & IORING_CQE_F_MORE))
+            {
+                pipeline->queueRead(conn);
+                io_uring_submit(ring);
             }
             break;
         }
@@ -234,7 +312,7 @@ void Core::handleTCP(Gen::Connection &conn, Gen::Thread &thread)
 
         conn.expectedLength = 0;
 
-        auto response = handle(dnsPacket, true, conn.ip, conn.ip_str, thread);
+        auto response = handle(dnsPacket.data(), true, conn.ip, conn.ip_str, thread);
 
         uint16_t len = htons(response.size());
 
@@ -270,10 +348,8 @@ void Core::writeTCP(Gen::Connection &conn, Gen::Thread &thread)
     }
 }
 
-std::vector<uint8_t> Core::handle(std::vector<uint8_t> data, bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread)
+std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread)
 {
-    uint8_t *buffer = data.data();
-
     if (isLogging)
     {
         std::cout << (is_tcp ? "TCP " : "UDP ") << "Request" << std::endl;
@@ -349,7 +425,6 @@ std::vector<uint8_t> Core::handle(std::vector<uint8_t> data, bool is_tcp, uint32
     read16();
 
     // ---------------- FIND ZONE (Longest suffix) ----------------
-    std::vector<uint8_t> zoneWire;
     size_t i = 0;
 
     for (auto &byte : nameWire)
