@@ -24,12 +24,10 @@
 #include <atomic>
 
 #include "DNS/RRL.hpp"
-
 #include "Global/Static.hpp"
-
 #include "DNS/Proxy/Proxy.hpp"
-
 #include "Cassandra/Record.hpp"
+#include "Core/Thread/Operational.hpp"
 
 class Core
 {
@@ -91,19 +89,16 @@ public:
     void start_clock_thread();
 
 private:
-    int eod_port = 53;
+    int PORT = 53;
+    int MAX_EVENT = 10;
 
-    int max_event = 10;
-
-    bool is_logging = false;
-    bool is_rrl = false;
-
-    int eod_ipc_fd;
+    bool isLogging = false;
+    bool rateLimiting = false;
 
     int threadCount = 1;
     std::vector<std::thread> threads;
 
     uint32_t threshold = 200;
 
-    std::mutex cout_mutex;
+    std::mutex coutMutex;
 };

@@ -20,10 +20,14 @@ void Core::start()
         activeThreads[i].id = threads[i].get_id();
     }
 
+    std::thread operationalThread(Operational::queueLifeCycle);
+
     for (auto &t : threads)
     {
         t.join();
     }
+
+    operationalThread.detach();
 }
 
 void Core::worker(int th)
@@ -35,11 +39,11 @@ void Core::worker(int th)
     initUDP(thread);
     initTCP(thread);
 
-    epoll_event events[max_event];
+    epoll_event events[MAX_EVENT];
 
     while (true)
     {
-        int n = epoll_wait(thread.epoll_fd, events, max_event, -1);
+        int n = epoll_wait(thread.epoll_fd, events, MAX_EVENT, -1);
 
         for (int i = 0; i < n; ++i)
         {
@@ -130,7 +134,7 @@ void Core::initUDP(Thread &thread)
     sockaddr_in eod_addr{};
     eod_addr.sin_family = AF_INET;
     eod_addr.sin_addr.s_addr = INADDR_ANY;
-    eod_addr.sin_port = htons(eod_port);
+    eod_addr.sin_port = htons(PORT);
 
     if (bind(thread.eod_udp_fd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
     {
@@ -146,7 +150,7 @@ void Core::initUDP(Thread &thread)
         perror("epoll ctl");
     }
 
-    std::lock_guard<std::mutex> lock(cout_mutex);
+    std::lock_guard<std::mutex> lock(coutMutex);
     std::cout << "UDP Socket Initalized On Thread " << thread.id << ".\n";
 }
 
@@ -240,7 +244,7 @@ void Core::initTCP(Thread &thread)
     sockaddr_in eod_addr{};
     eod_addr.sin_family = AF_INET;
     eod_addr.sin_addr.s_addr = INADDR_ANY;
-    eod_addr.sin_port = htons(eod_port);
+    eod_addr.sin_port = htons(PORT);
 
     if (bind(thread.eod_tcp_fd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
     {
@@ -261,7 +265,7 @@ void Core::initTCP(Thread &thread)
         perror("epoll tcp ctl");
     }
 
-    std::lock_guard<std::mutex> lock(cout_mutex);
+    std::lock_guard<std::mutex> lock(coutMutex);
     std::cout << "TCP Socket Initalized On Thread " << thread.id << ".\n";
 }
 
@@ -344,7 +348,7 @@ void Core::writeTCP(Connection &conn, Thread &thread)
 
 std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, char *ip_str, Thread &thread)
 {
-    if (is_logging)
+    if (isLogging)
     {
         std::cout << (is_tcp ? "TCP " : "UDP ") << "Request" << std::endl;
     }
@@ -448,7 +452,7 @@ std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip
 
         for (auto &rec : matched_records)
         {
-            Main::map->append_record(nameWire, qtype, rec.ttl, rec.priority, rec.rdata);
+            Operational::addQueue(nameWire, qtype, rec.ttl, rec.priority, rec.rdata);
         }
     }
 
@@ -500,7 +504,7 @@ std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip
     {
         for (auto &record : matched_records)
         {
-            if (is_rrl)
+            if (rateLimiting)
             {
                 RRLKey key;
                 key.prefix = ip;

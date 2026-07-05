@@ -1,0 +1,26 @@
+#pragma once
+
+#include <string>
+#include <cstdint>
+#include <vector>
+#include <list>
+
+#include "index.hpp"
+
+class Operational
+{
+public:
+    static void addQueue(const std::vector<uint8_t> &name, int qtype, int ttl, int prio, const std::vector<uint8_t> &val);
+    static void queueLifeCycle();
+
+    typedef struct
+    {
+        std::vector<uint8_t> name;
+        int qtype;
+        int ttl;
+        int prio;
+        std::vector<uint8_t> val;
+    } Record;
+
+    static std::list<Record> queue;
+};
