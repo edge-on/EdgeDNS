@@ -20,7 +20,10 @@ void Operational::queueLifeCycle()
     while (true)
     {
         if (queue.empty())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
+        }
 
         Operational::Record rec;
         rec = std::move(queue.front());

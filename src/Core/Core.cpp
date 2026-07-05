@@ -227,38 +227,34 @@ void Core::worker(int th)
                 size_t queryLen = std::min(payload_len, sizeof(queryBuf));
                 memcpy(queryBuf, payload, queryLen);
 
-                pipeline->pool->releaseBuffer(buf_id);
-
                 sockaddr_storage peerAddr;
                 memcpy(&peerAddr, io_uring_recvmsg_name(o), o->namelen);
                 socklen_t peerLen = o->namelen;
 
+                pipeline->pool->releaseBuffer(buf_id);
+
                 char ipStr[INET6_ADDRSTRLEN] = {0};
                 if (peerAddr.ss_family == AF_INET)
                     inet_ntop(AF_INET, &((sockaddr_in *)&peerAddr)->sin_addr, ipStr, sizeof(ipStr));
+                else if (peerAddr.ss_family == AF_INET6)
+                    inet_ntop(AF_INET6, &((sockaddr_in6 *)&peerAddr)->sin6_addr, ipStr, sizeof(ipStr));
 
                 Gen::Context *ctx = new Gen::Context();
                 ctx->fd = conn.fd;
                 memcpy(&ctx->peerAddr, &peerAddr, peerLen);
                 ctx->peerLen = peerLen;
 
-                auto data = handle(queryBuf, false,
-                                   ((sockaddr_in *)&peerAddr)->sin_addr.s_addr,
-                                   ipStr, thread);
+                ctx->writeBuffer = handle(queryBuf, false,
+                                          ((sockaddr_in *)&peerAddr)->sin_addr.s_addr,
+                                          ipStr, thread);
 
-                ctx->iov.iov_base = data.data();
-                ctx->iov.iov_len = data.size();
-                
+                ctx->iov.iov_base = ctx->writeBuffer.data();
+                ctx->iov.iov_len = ctx->writeBuffer.size();
+
                 pipeline->queueWrite(ctx);
                 io_uring_submit(ring);
                 break;
             }
-            }
-
-            if (!(cqe->flags & IORING_CQE_F_MORE))
-            {
-                pipeline->queueRead(conn);
-                io_uring_submit(ring);
             }
             break;
         }
@@ -390,6 +386,7 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
 
     // ---------------- READ QNAME ----------------
     std::vector<uint8_t> nameWire;
+    nameWire.reserve(256);
 
     size_t name_start = offset;
 
@@ -425,8 +422,6 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
     read16();
 
     // ---------------- FIND ZONE (Longest suffix) ----------------
-    size_t i = 0;
-
     for (auto &byte : nameWire)
     {
         if (byte >= 'A' && byte <= 'Z')
@@ -436,17 +431,24 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
     }
 
     std::vector<uint8_t> response;
+    response.reserve(512);
 
     uint16_t response_flags = 0;
     uint16_t anc = 0;
 
-    std::vector<uint8_t> zoneData = Utils::Vector::getHostWireFromWire(nameWire.data(), nameWire.size());
-
     std::vector<DNSResponseData> matched_records;
-    if (!Main::map->get_record(nameWire, qtype, matched_records))
+    bool cacheHit = Main::map->get_record(nameWire, qtype, matched_records);
+
+    std::vector<uint8_t> zoneData;
+    if (!cacheHit || rateLimiting)
+    {
+        zoneData = Utils::Vector::getHostWireFromWire(nameWire.data(), nameWire.size());
+    }
+
+    if (!cacheHit)
     {
         // Go To DB, Take the data and append to mmap
-        std::string name = Utils::Vector::wireToDomain(nameWire.data(), sizeof(nameWire));
+        std::string name = Utils::Vector::wireToDomain(nameWire.data(), nameWire.size());
         std::string zone = Utils::Vector::wireToDomain(zoneData.data(), zoneData.size());
 
         matched_records = DB::Record::getRecord(zone, name, qtype);
@@ -559,16 +561,9 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
 
                 if (qtype == 15)
                 {
-                    std::vector<uint8_t> rdata;
-
-                    write16(rdata, record.priority);
-                    rdata.insert(rdata.end(), record.rdata.begin(), record.rdata.end());
-
-                    write16(response, rdata.size());
-
-                    response.insert(response.end(),
-                                    rdata.begin(),
-                                    rdata.end());
+                    write16(response, static_cast<uint16_t>(2 + record.rdata.size()));
+                    write16(response, record.priority);
+                    response.insert(response.end(), record.rdata.begin(), record.rdata.end());
                 }
                 else if (qtype == 16)
                 {
@@ -587,8 +582,6 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
 
                 anc++;
             }
-
-            i++;
         }
 
         if (anc == 0)
