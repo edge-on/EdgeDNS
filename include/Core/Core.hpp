@@ -53,8 +53,6 @@ public:
     void initUDP(Gen::Thread &th);
     void initTCP(Gen::Thread &th);
 
-    void handleUDP(Gen::Thread &th);
-
     void handleTCP(Gen::Connection &conn, Gen::Thread &th);
     void writeTCP(Gen::Connection &conn, Gen::Thread &th);
 

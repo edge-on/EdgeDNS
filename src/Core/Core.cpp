@@ -177,11 +177,14 @@ void Core::worker(int th)
                     inet_ntop(AF_INET6, &(addr_ipv6->sin6_addr), ip_str, INET6_ADDRSTRLEN);
                 }
 
+                conn.ip = ((sockaddr_in *)&addr)->sin_addr.s_addr;
                 conn.ip_str = ip_str;
-                std::cout << ip_str << std::endl;
             }
 
             thread.connections[clientFd] = std::move(conn);
+
+            pipeline->queueRead(thread.connections[clientFd]);
+            io_uring_submit(ring);
 
             continue;
         }
@@ -196,42 +199,46 @@ void Core::worker(int th)
         {
         case Gen::STATE_READ:
         {
+            int buf_id = cqe->flags >> IORING_CQE_BUFFER_SHIFT;
+            char *raw = pipeline->pool->getBufferAddress(buf_id);
+            size_t buf_size = pipeline->pool->getBufferSize();
+
+            if (cqe->res < 0)
+            {
+                std::cerr << "recvmsg failed: " << strerror(-cqe->res) << std::endl;
+                pipeline->pool->releaseBuffer(buf_id);
+                break;
+            }
+
+            struct io_uring_recvmsg_out *o = io_uring_recvmsg_validate(raw, cqe->res, &conn.msgHdr);
+            if (!o)
+            {
+                pipeline->pool->releaseBuffer(buf_id);
+                break;
+            }
+
+            void *payload = io_uring_recvmsg_payload(o, &conn.msgHdr);
+            size_t payload_len = io_uring_recvmsg_payload_length(o, cqe->res, &conn.msgHdr);
+
+            uint8_t queryBuf[512];
+            size_t queryLen = std::min(payload_len, sizeof(queryBuf));
+            memcpy(queryBuf, payload, queryLen);
+
+            pipeline->pool->releaseBuffer(buf_id);
+
             switch (conn.type)
             {
             case Gen::TCP:
+                conn.writeBuffer = handle(queryBuf, false, conn.ip, conn.ip_str, thread);
+
+                pipeline->queueWriteTcp(conn);
+                io_uring_submit(ring);
                 break;
             case Gen::UDP:
             {
-                int buf_id = cqe->flags >> IORING_CQE_BUFFER_SHIFT;
-                char *raw = pipeline->pool->getBufferAddress(buf_id);
-                size_t buf_size = pipeline->pool->getBufferSize();
-
-                if (cqe->res < 0)
-                {
-                    std::cerr << "recvmsg failed: " << strerror(-cqe->res) << std::endl;
-                    pipeline->pool->releaseBuffer(buf_id);
-                    break;
-                }
-
-                struct io_uring_recvmsg_out *o = io_uring_recvmsg_validate(raw, cqe->res, &conn.msgHdr);
-                if (!o)
-                {
-                    pipeline->pool->releaseBuffer(buf_id);
-                    break;
-                }
-
-                void *payload = io_uring_recvmsg_payload(o, &conn.msgHdr);
-                size_t payload_len = io_uring_recvmsg_payload_length(o, cqe->res, &conn.msgHdr);
-
-                uint8_t queryBuf[512];
-                size_t queryLen = std::min(payload_len, sizeof(queryBuf));
-                memcpy(queryBuf, payload, queryLen);
-
                 sockaddr_storage peerAddr;
                 memcpy(&peerAddr, io_uring_recvmsg_name(o), o->namelen);
                 socklen_t peerLen = o->namelen;
-
-                pipeline->pool->releaseBuffer(buf_id);
 
                 char ipStr[INET6_ADDRSTRLEN] = {0};
                 if (peerAddr.ss_family == AF_INET)
@@ -244,14 +251,12 @@ void Core::worker(int th)
                 memcpy(&ctx->peerAddr, &peerAddr, peerLen);
                 ctx->peerLen = peerLen;
 
-                ctx->writeBuffer = handle(queryBuf, false,
-                                          ((sockaddr_in *)&peerAddr)->sin_addr.s_addr,
-                                          ipStr, thread);
+                ctx->writeBuffer = handle(queryBuf, false, ((sockaddr_in *)&peerAddr)->sin_addr.s_addr, ipStr, thread);
 
                 ctx->iov.iov_base = ctx->writeBuffer.data();
                 ctx->iov.iov_len = ctx->writeBuffer.size();
 
-                pipeline->queueWrite(ctx);
+                pipeline->queueWriteUdp(ctx);
                 io_uring_submit(ring);
                 break;
             }
@@ -265,10 +270,6 @@ void Core::worker(int th)
         }
         }
     }
-}
-
-void Core::handleUDP(Gen::Thread &thread)
-{
 }
 
 void Core::handleTCP(Gen::Connection &conn, Gen::Thread &thread)
@@ -351,7 +352,7 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
         std::cout << (is_tcp ? "TCP " : "UDP ") << "Request" << std::endl;
     }
 
-    bool truncated = false;
+    bool truncated = true;
 
     size_t offset = 0;
 

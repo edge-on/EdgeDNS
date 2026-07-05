@@ -22,7 +22,8 @@ void Pipeline::queueMultishotAccept(int fd)
 void Pipeline::queueRead(Gen::Connection &conn)
 {
     struct io_uring_sqe *sqe = getSqe();
-    if (!sqe) {
+    if (!sqe)
+    {
         return;
     }
 
@@ -37,10 +38,11 @@ void Pipeline::queueRead(Gen::Connection &conn)
     io_uring_sqe_set_data(sqe, (void *)data);
 }
 
-void Pipeline::queueWrite(Gen::Context *ctx)
+void Pipeline::queueWriteUdp(Gen::Context *ctx)
 {
     struct io_uring_sqe *sqe = getSqe();
-    if (!sqe) {
+    if (!sqe)
+    {
         delete ctx;
         return;
     }
@@ -51,11 +53,23 @@ void Pipeline::queueWrite(Gen::Context *ctx)
     ctx->msgHdr.msg_iovlen = 1;
     ctx->msgHdr.msg_control = nullptr;
     ctx->msgHdr.msg_controllen = 0;
-    
+
     uint64_t data = (uint64_t)ctx | (1ULL << 63);
     io_uring_prep_sendmsg(sqe, ctx->fd, &ctx->msgHdr, 0);
     io_uring_sqe_set_data(sqe, (void *)data);
 }
+
+void Pipeline::queueWriteTcp(Gen::Connection &conn)
+{
+    struct io_uring_sqe *sqe = getSqe();
+    if (!sqe)
+        return;
+
+    uint64_t data = (uint64_t)Gen::STATE_WRITE | (uint32_t)conn.fd;
+    io_uring_prep_send(sqe, conn.fd, conn.writeBuffer.data(), conn.writeBuffer.size(), 0);
+    io_uring_sqe_set_data(sqe, (void *)data);
+}
+
 struct io_uring_sqe *Pipeline::getSqe()
 {
     if (!&thread->ring)

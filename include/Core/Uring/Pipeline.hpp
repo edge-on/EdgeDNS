@@ -13,7 +13,8 @@ public:
 
     void queueMultishotAccept(int fd);
     void queueRead(Gen::Connection &conn);
-    void queueWrite(Gen::Context *ctx);
+    void queueWriteUdp(Gen::Context *ctx);
+    void queueWriteTcp(Gen::Connection &conn);
 
     BufferPool *pool;
 private:
