@@ -24,7 +24,9 @@ void Operational::queueLifeCycle()
         Operational::Record rec;
         rec = std::move(queue.front());
         queue.pop_front();
-        Main::map->append_record(rec.name, rec.qtype, rec.ttl, rec.prio, rec.val);
+
+        if (rec.type == QueueType::ADD)
+            Main::map->append_record(rec.name, rec.qtype, rec.ttl, rec.prio, rec.val);
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }

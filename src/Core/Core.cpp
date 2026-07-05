@@ -30,12 +30,73 @@ void Core::start()
     operationalThread.detach();
 }
 
+void Core::initUDP(Thread &thread)
+{
+    thread.udpFd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    makeNonBlocking(thread.udpFd);
+
+    if (thread.udpFd == 0)
+    {
+        perror("eod socket");
+    }
+
+    int opt = 1;
+    setsockopt(thread.udpFd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
+
+    sockaddr_in eod_addr{};
+    eod_addr.sin_family = AF_INET;
+    eod_addr.sin_addr.s_addr = INADDR_ANY;
+    eod_addr.sin_port = htons(PORT);
+
+    if (bind(thread.udpFd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
+    {
+        perror("eod bind");
+    }
+
+    std::lock_guard<std::mutex> lock(coutMutex);
+    std::cout << "UDP Socket Initalized On Thread " << thread.id << ".\n";
+}
+
+void Core::initTCP(Thread &thread)
+{
+    thread.tcpFd = socket(AF_INET, SOCK_STREAM, 0);
+
+    makeNonBlocking(thread.tcpFd);
+
+    if (thread.tcpFd == 0)
+    {
+        perror("eod tcp socket");
+    }
+
+    int opt = 1;
+    setsockopt(thread.tcpFd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
+
+    sockaddr_in eod_addr{};
+    eod_addr.sin_family = AF_INET;
+    eod_addr.sin_addr.s_addr = INADDR_ANY;
+    eod_addr.sin_port = htons(PORT);
+
+    if (bind(thread.tcpFd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
+    {
+        perror("eod tcp bind");
+    }
+
+    if (listen(thread.tcpFd, SOMAXCONN) < 0)
+    {
+        perror("eod tcp listen");
+    }
+
+    std::lock_guard<std::mutex> lock(coutMutex);
+    std::cout << "TCP Socket Initalized On Thread " << thread.id << ".\n";
+}
+
 void Core::worker(int th)
 {
     Thread &thread = activeThreads[th];
 
-    thread.epoll_fd = epoll_create1(0);
-
+    struct io_uring *ring = thread.ring;
+    
     initUDP(thread);
     initTCP(thread);
 
@@ -117,43 +178,6 @@ void Core::worker(int th)
     }
 }
 
-void Core::initUDP(Thread &thread)
-{
-    thread.eod_udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
-
-    makeNonBlocking(thread.eod_udp_fd);
-
-    if (thread.eod_udp_fd == 0)
-    {
-        perror("eod socket");
-    }
-
-    int opt = 1;
-    setsockopt(thread.eod_udp_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
-
-    sockaddr_in eod_addr{};
-    eod_addr.sin_family = AF_INET;
-    eod_addr.sin_addr.s_addr = INADDR_ANY;
-    eod_addr.sin_port = htons(PORT);
-
-    if (bind(thread.eod_udp_fd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
-    {
-        perror("eod bind");
-    }
-
-    epoll_event event{};
-    event.events = EPOLLIN | EPOLLET;
-    event.data.fd = thread.eod_udp_fd;
-
-    if (epoll_ctl(thread.epoll_fd, EPOLL_CTL_ADD, thread.eod_udp_fd, &event) < 0)
-    {
-        perror("epoll ctl");
-    }
-
-    std::lock_guard<std::mutex> lock(coutMutex);
-    std::cout << "UDP Socket Initalized On Thread " << thread.id << ".\n";
-}
-
 void Core::handleUDP(Thread &thread)
 {
     constexpr int BATCH = 256;
@@ -225,48 +249,6 @@ void Core::handleUDP(Thread &thread)
         0);
 
     (void)sent;
-}
-
-void Core::initTCP(Thread &thread)
-{
-    thread.eod_tcp_fd = socket(AF_INET, SOCK_STREAM, 0);
-
-    makeNonBlocking(thread.eod_tcp_fd);
-
-    if (thread.eod_tcp_fd == 0)
-    {
-        perror("eod tcp socket");
-    }
-
-    int opt = 1;
-    setsockopt(thread.eod_tcp_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
-
-    sockaddr_in eod_addr{};
-    eod_addr.sin_family = AF_INET;
-    eod_addr.sin_addr.s_addr = INADDR_ANY;
-    eod_addr.sin_port = htons(PORT);
-
-    if (bind(thread.eod_tcp_fd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
-    {
-        perror("eod tcp bind");
-    }
-
-    if (listen(thread.eod_tcp_fd, SOMAXCONN) < 0)
-    {
-        perror("eod tcp listen");
-    }
-
-    epoll_event event{};
-    event.events = EPOLLIN | EPOLLET;
-    event.data.fd = thread.eod_tcp_fd;
-
-    if (epoll_ctl(thread.epoll_fd, EPOLL_CTL_ADD, thread.eod_tcp_fd, &event) < 0)
-    {
-        perror("epoll tcp ctl");
-    }
-
-    std::lock_guard<std::mutex> lock(coutMutex);
-    std::cout << "TCP Socket Initalized On Thread " << thread.id << ".\n";
 }
 
 void Core::handleTCP(Connection &conn, Thread &thread)

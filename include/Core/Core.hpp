@@ -1,8 +1,9 @@
 #pragma once
 
 #include <sys/socket.h>
-#include <sys/epoll.h>
 #include <sys/un.h>
+
+#include <liburing.h>
 
 #include <unistd.h>
 
@@ -23,45 +24,18 @@
 
 #include <atomic>
 
-#include "DNS/RRL.hpp"
 #include "Global/Static.hpp"
 #include "DNS/Proxy/Proxy.hpp"
 #include "Cassandra/Record.hpp"
 #include "Core/Thread/Operational.hpp"
+
+#include "Core/Gen/Gen.hpp"
 
 class Core
 {
 public:
     Core();
     ~Core();
-
-    struct Connection
-    {
-        int fd;
-
-        uint32_t ip;
-        char *ip_str;
-
-        std::vector<uint8_t> readBuffer;
-        std::vector<uint8_t> writeBuffer;
-        uint16_t expectedLength = 0;
-    };
-
-    struct Thread
-    {
-        std::thread::id id;
-
-        int epoll_fd;
-
-        int eod_udp_fd;
-        int eod_tcp_fd;
-
-        std::unordered_map<int, Connection> connections;
-
-        ankerl::unordered_dense::map<RRLKey, RRLBucket, RRLKeyHash> rrlBuckets;
-    };
-
-    std::unordered_map<int, Thread> activeThreads;
 
     void write16(std::vector<uint8_t> &buf, uint16_t value);
     void write32(std::vector<uint8_t> &buf, uint32_t value);
@@ -72,17 +46,17 @@ public:
 
     void worker(int th);
 
-    void initUDP(Thread &th);
-    void handleUDP(Thread &th);
+    void initUDP(Gen::Thread &th);
+    void handleUDP(Gen::Thread &th);
 
-    void initTCP(Thread &th);
-    void handleTCP(Connection &conn, Thread &th);
-    void writeTCP(Connection &conn, Thread &th);
+    void initTCP(Gen::Thread &th);
+    void handleTCP(Gen::Connection &conn, Gen::Thread &th);
+    void writeTCP(Gen::Connection &conn, Gen::Thread &th);
 
     void enableWrite(int fd, int epoll_fd);
     void disableWrite(int fd, int epoll_fd);
 
-    std::vector<uint8_t> handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, char *ip_str, Thread &thread);
+    std::vector<uint8_t> handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread);
 
     std::atomic<uint32_t> g_second;
     uint32_t now();
