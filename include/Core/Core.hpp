@@ -53,10 +53,7 @@ public:
     void handleTCP(Gen::Connection &conn, Gen::Thread &th);
     void writeTCP(Gen::Connection &conn, Gen::Thread &th);
 
-    void enableWrite(int fd, int epoll_fd);
-    void disableWrite(int fd, int epoll_fd);
-
-    std::vector<uint8_t> handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread);
+    std::vector<uint8_t> handle(std::vector<uint8_t> data, bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread);
 
     std::atomic<uint32_t> g_second;
     uint32_t now();

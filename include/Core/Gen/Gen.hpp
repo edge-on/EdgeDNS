@@ -7,6 +7,8 @@
 
 #include "DNS/RRL.hpp"
 
+#define QUEUE_DEPTH 8192
+
 class Gen
 {
 public:
@@ -18,8 +20,11 @@ public:
         uint32_t ip;
         char *ip_str;
 
+        int type;
+
         std::vector<uint8_t> readBuffer;
         std::vector<uint8_t> writeBuffer;
+
         uint16_t expectedLength = 0;
     } Connection;
 
@@ -31,7 +36,7 @@ public:
         int udpFd;
         int tcpFd;
 
-        struct io_uring *ring;
+        struct io_uring ring;
 
         std::unordered_map<int, Connection> connections;
 
@@ -46,5 +51,11 @@ public:
         STATE_MULTISHOT_ACCEPT,
         STATE_READ,
         STATE_WRITE
+    };
+
+    typedef enum
+    {
+        UDP,
+        TCP
     };
 };

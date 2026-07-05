@@ -1,6 +1,6 @@
 #include "Core/Core.hpp"
 
-Core::Core() : activeThreads({})
+Core::Core()
 {
 }
 
@@ -17,7 +17,7 @@ void Core::start()
     for (int i = 0; i < threadCount; ++i)
     {
         threads.emplace_back(&Core::worker, this, i);
-        activeThreads[i].id = threads[i].get_id();
+        Gen::activeThreads[i].id = threads[i].get_id();
     }
 
     std::thread operationalThread(Operational::queueLifeCycle);
@@ -30,7 +30,7 @@ void Core::start()
     operationalThread.detach();
 }
 
-void Core::initUDP(Thread &thread)
+void Core::initUDP(Gen::Thread &thread)
 {
     thread.udpFd = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -58,7 +58,7 @@ void Core::initUDP(Thread &thread)
     std::cout << "UDP Socket Initalized On Thread " << thread.id << ".\n";
 }
 
-void Core::initTCP(Thread &thread)
+void Core::initTCP(Gen::Thread &thread)
 {
     thread.tcpFd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -93,165 +93,111 @@ void Core::initTCP(Thread &thread)
 
 void Core::worker(int th)
 {
-    Thread &thread = activeThreads[th];
+    Gen::Thread &thread = Gen::activeThreads[th];
 
-    struct io_uring *ring = thread.ring;
-    
+    struct io_uring *ring = &thread.ring;
+    if (io_uring_queue_init(QUEUE_DEPTH, ring, 0) < 0)
+    {
+        perror("io uring queue init");
+        return;
+    }
+
     initUDP(thread);
     initTCP(thread);
 
-    epoll_event events[MAX_EVENT];
+    io_uring_submit(ring);
 
     while (true)
     {
-        int n = epoll_wait(thread.epoll_fd, events, MAX_EVENT, -1);
+        struct io_uring_cqe *cqe;
+        int ret = io_uring_wait_cqe(ring, &cqe);
+        if (ret < 0)
+            break;
 
-        for (int i = 0; i < n; ++i)
+        uint64_t data = (uint64_t)io_uring_cqe_get_data(cqe);
+        int fd = (int)(data & 0xFFFFFFFF);
+        int type = (int)(data >> 32);
+
+        int res = cqe->res;
+        bool hasMore = cqe->flags & IORING_CQE_F_MORE;
+        io_uring_cqe_seen(ring, cqe);
+
+        if (res < 0)
         {
-            if (events[i].data.fd == thread.eod_udp_fd)
+            // Close
+        }
+
+        if (type == Gen::STATE_MULTISHOT_ACCEPT)
+        {
+            int t = fd == thread.tcpFd ? Gen::TCP : Gen::UDP;
+            int clientFd = res;
+
+            Gen::Connection conn;
+            conn.fd = clientFd;
+            conn.type = t;
+
+            struct sockaddr_storage addr;
+            socklen_t len = sizeof(addr);
+
+            if (getpeername(clientFd, (struct sockaddr *)&addr, &len) == 0)
             {
+                char ip_str[INET6_ADDRSTRLEN];
+
+                if (addr.ss_family == AF_INET)
+                {
+                    struct sockaddr_in *addr_ipv4 = (struct sockaddr_in *)&addr;
+                    inet_ntop(AF_INET, &(addr_ipv4->sin_addr), ip_str, INET_ADDRSTRLEN);
+                }
+                else if (addr.ss_family == AF_INET6)
+                {
+                    struct sockaddr_in6 *addr_ipv6 = (struct sockaddr_in6 *)&addr;
+                    inet_ntop(AF_INET6, &(addr_ipv6->sin6_addr), ip_str, INET6_ADDRSTRLEN);
+                }
+
+                conn.ip_str = ip_str;
+                // std::cout << ip_str << std::endl;
+            }
+
+            thread.connections[clientFd] = std::move(conn);
+
+            continue;
+        }
+
+        auto it = thread.connections.find(fd);
+        if (it == thread.connections.end())
+            continue;
+
+        Gen::Connection &conn = it->second;
+
+        switch (type)
+        {
+        case Gen::STATE_READ:
+        {
+            switch (conn.type)
+            {
+            case Gen::TCP:
+                break;
+
+            case Gen::UDP:
                 handleUDP(thread);
+                break;
             }
-            else if (events[i].data.fd == thread.eod_tcp_fd)
-            {
-                while (true)
-                {
-                    sockaddr_in event{};
-                    socklen_t len = sizeof(event);
+            break;
+        }
 
-                    int client_fd = accept(thread.eod_tcp_fd, (sockaddr *)&event, &len);
-
-                    if (client_fd == -1)
-                    {
-                        if (errno == EAGAIN || errno == EWOULDBLOCK)
-                        {
-                            break;
-                        }
-                        else
-                        {
-                            perror("accept");
-                            break;
-                        }
-                    }
-
-                    makeNonBlocking(client_fd);
-
-                    Connection conn{};
-                    conn.fd = client_fd;
-                    conn.ip = htons(event.sin_addr.s_addr);
-
-                    char ip_str[INET_ADDRSTRLEN];
-                    inet_ntop(AF_INET, &event.sin_addr.s_addr, ip_str, INET_ADDRSTRLEN);
-
-                    conn.ip_str = ip_str;
-
-                    thread.connections.emplace(client_fd, std::move(conn));
-
-                    epoll_event e{};
-                    e.data.fd = client_fd;
-                    e.events = EPOLLIN | EPOLLET;
-
-                    epoll_ctl(thread.epoll_fd, EPOLL_CTL_ADD, client_fd, &e);
-                }
-            }
-            else
-            {
-                auto it = thread.connections.find(events[i].data.fd);
-                if (it == thread.connections.end())
-                {
-                    continue;
-                }
-
-                Connection &conn = it->second;
-
-                if (events[i].events & EPOLLIN)
-                {
-                    handleTCP(conn, thread);
-                }
-
-                if (events[i].events & EPOLLOUT)
-                {
-                    writeTCP(conn, thread);
-                }
-            }
+        case Gen::STATE_WRITE:
+        {
+            break;
+        }
         }
     }
 }
 
-void Core::handleUDP(Thread &thread)
+void Core::handleUDP(Gen::Thread &thread)
 {
-    constexpr int BATCH = 256;
-    constexpr int BUF_SIZE = 4096;
-
-    struct mmsghdr recv_msgs[BATCH];
-    struct iovec recv_iovecs[BATCH];
-    struct sockaddr_in clients[BATCH];
-    uint8_t recv_buffers[BATCH][BUF_SIZE];
-
-    struct mmsghdr send_msgs[BATCH];
-    struct iovec send_iovecs[BATCH];
-    uint8_t send_buffers[BATCH][BUF_SIZE];
-
-    for (int i = 0; i < BATCH; i++)
-    {
-        recv_iovecs[i].iov_base = recv_buffers[i];
-        recv_iovecs[i].iov_len = BUF_SIZE;
-
-        recv_msgs[i].msg_hdr.msg_iov = &recv_iovecs[i];
-        recv_msgs[i].msg_hdr.msg_iovlen = 1;
-        recv_msgs[i].msg_hdr.msg_name = &clients[i];
-        recv_msgs[i].msg_hdr.msg_namelen = sizeof(sockaddr_in);
-        recv_msgs[i].msg_hdr.msg_control = nullptr;
-        recv_msgs[i].msg_hdr.msg_controllen = 0;
-        recv_msgs[i].msg_hdr.msg_flags = 0;
-    }
-
-    int received = recvmmsg(
-        thread.eod_udp_fd,
-        recv_msgs,
-        BATCH,
-        MSG_WAITFORONE,
-        nullptr);
-
-    if (received <= 0)
-        return;
-
-    for (int i = 0; i < received; i++)
-    {
-        int len = recv_msgs[i].msg_len;
-
-        uint32_t ip = ntohl(clients[i].sin_addr.s_addr);
-
-        char ip_str[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &clients[i].sin_addr, ip_str, INET_ADDRSTRLEN);
-
-        std::vector<uint8_t> resp =
-            handle(recv_buffers[i], false, ip, ip_str, thread);
-
-        memcpy(send_buffers[i], resp.data(), resp.size());
-
-        send_iovecs[i].iov_base = send_buffers[i];
-        send_iovecs[i].iov_len = resp.size();
-
-        send_msgs[i].msg_hdr.msg_iov = &send_iovecs[i];
-        send_msgs[i].msg_hdr.msg_iovlen = 1;
-        send_msgs[i].msg_hdr.msg_name = &clients[i];
-        send_msgs[i].msg_hdr.msg_namelen = sizeof(sockaddr_in);
-        send_msgs[i].msg_hdr.msg_control = nullptr;
-        send_msgs[i].msg_hdr.msg_controllen = 0;
-        send_msgs[i].msg_hdr.msg_flags = 0;
-    }
-
-    int sent = sendmmsg(
-        thread.eod_udp_fd,
-        send_msgs,
-        received,
-        0);
-
-    (void)sent;
 }
 
-void Core::handleTCP(Connection &conn, Thread &thread)
+void Core::handleTCP(Gen::Connection &conn, Gen::Thread &thread)
 {
     uint8_t temp[4096];
     ssize_t n = read(conn.fd, temp, sizeof(temp));
@@ -288,7 +234,7 @@ void Core::handleTCP(Connection &conn, Thread &thread)
 
         conn.expectedLength = 0;
 
-        auto response = handle(dnsPacket.data(), true, conn.ip, conn.ip_str, thread);
+        auto response = handle(dnsPacket, true, conn.ip, conn.ip_str, thread);
 
         uint16_t len = htons(response.size());
 
@@ -299,12 +245,10 @@ void Core::handleTCP(Connection &conn, Thread &thread)
         conn.writeBuffer.insert(conn.writeBuffer.end(),
                                 response.begin(),
                                 response.end());
-
-        enableWrite(conn.fd, thread.epoll_fd);
     }
 }
 
-void Core::writeTCP(Connection &conn, Thread &thread)
+void Core::writeTCP(Gen::Connection &conn, Gen::Thread &thread)
 {
     while (!conn.writeBuffer.empty())
     {
@@ -324,12 +268,12 @@ void Core::writeTCP(Connection &conn, Thread &thread)
             conn.writeBuffer.begin(),
             conn.writeBuffer.begin() + sent);
     }
-
-    disableWrite(conn.fd, thread.epoll_fd);
 }
 
-std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip, char *ip_str, Thread &thread)
+std::vector<uint8_t> Core::handle(std::vector<uint8_t> data, bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread)
 {
+    uint8_t *buffer = data.data();
+
     if (isLogging)
     {
         std::cout << (is_tcp ? "TCP " : "UDP ") << "Request" << std::endl;
@@ -600,24 +544,6 @@ std::vector<uint8_t> Core::handle(uint8_t buffer[4096], bool is_tcp, uint32_t ip
     write16(response, 0);    // RDLEN: 0
 
     return response;
-}
-
-void Core::enableWrite(int fd, int epoll_fd)
-{
-    epoll_event ev{};
-    ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
-    ev.data.fd = fd;
-
-    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev);
-}
-
-void Core::disableWrite(int fd, int epoll_fd)
-{
-    epoll_event ev{};
-    ev.events = EPOLLIN | EPOLLET;
-    ev.data.fd = fd;
-
-    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev);
 }
 
 int Core::makeNonBlocking(int sfd)
