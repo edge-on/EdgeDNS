@@ -181,6 +181,8 @@ void Core::worker(int th)
                 conn.ip_str = ip_str;
             }
 
+            conn.type = Gen::TCP;
+
             thread.connections[clientFd] = std::move(conn);
 
             pipeline->queueRead(thread.connections[clientFd]);
@@ -229,7 +231,8 @@ void Core::worker(int th)
             switch (conn.type)
             {
             case Gen::TCP:
-                conn.writeBuffer = handle(queryBuf, false, conn.ip, conn.ip_str, thread);
+
+                conn.writeBuffer = handle(queryBuf, true, conn.ip, conn.ip_str, thread);
 
                 pipeline->queueWriteTcp(conn);
                 io_uring_submit(ring);
@@ -266,6 +269,7 @@ void Core::worker(int th)
 
         case Gen::STATE_WRITE:
         {
+            std::cout << "here works - " << res << std::endl;
             break;
         }
         }
