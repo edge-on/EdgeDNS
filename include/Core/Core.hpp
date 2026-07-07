@@ -64,7 +64,6 @@ public:
 
 private:
     int PORT = 53;
-    int MAX_EVENT = 10;
 
     bool isLogging = false;
     bool rateLimiting = false;

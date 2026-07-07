@@ -358,9 +358,6 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
 
     bool truncated = false;
 
-    if (!is_tcp)
-        truncated = true;
-
     size_t offset = is_tcp ? 2 : 0;
 
     auto read16 = [&](void)
@@ -619,14 +616,15 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
     write32(response, 0);    // TTL: 0
     write16(response, 0);    // RDLEN: 0
 
-    std::vector<uint8_t> res;
-
     if (is_tcp)
+    {
+        std::vector<uint8_t> res;
         write16(res, response.size());
-
-    res.insert(res.end(), response.begin(), response.end());
-
-    return res;
+        res.insert(res.end(), response.begin(), response.end());
+        return res;
+    }
+    else
+        return response;
 }
 
 int Core::makeNonBlocking(int sfd)
