@@ -356,9 +356,12 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
         std::cout << (is_tcp ? "TCP " : "UDP ") << "Request" << std::endl;
     }
 
-    bool truncated = true;
+    bool truncated = false;
 
-    size_t offset = 0;
+    if (!is_tcp)
+        truncated = true;
+
+    size_t offset = is_tcp ? 2 : 0;
 
     auto read16 = [&](void)
     {
@@ -504,7 +507,7 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
 
     // copy question
     response.insert(response.end(),
-                    buffer + (12),
+                    buffer + (12 + (is_tcp ? 2 : 0)),
                     buffer + question_end);
 
     // ---------------- ANSWER ----------------
@@ -616,7 +619,14 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
     write32(response, 0);    // TTL: 0
     write16(response, 0);    // RDLEN: 0
 
-    return response;
+    std::vector<uint8_t> res;
+
+    if (is_tcp)
+        write16(res, response.size());
+
+    res.insert(res.end(), response.begin(), response.end());
+
+    return res;
 }
 
 int Core::makeNonBlocking(int sfd)
