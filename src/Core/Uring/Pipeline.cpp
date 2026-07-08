@@ -65,7 +65,7 @@ void Pipeline::queueWriteTcp(Gen::Connection &conn)
     if (!sqe)
         return;
 
-    uint64_t data = (uint64_t)Gen::STATE_WRITE | (uint32_t)conn.fd;
+    uint64_t data = ((uint64_t)Gen::STATE_WRITE << 32) | (uint32_t)conn.fd;
     io_uring_prep_send(sqe, conn.fd, conn.writeBuffer.data(), conn.writeBuffer.size(), 0);
     io_uring_sqe_set_data(sqe, (void *)data);
 }

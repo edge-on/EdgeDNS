@@ -289,7 +289,6 @@ void Core::worker(int th)
 
         case Gen::STATE_WRITE:
         {
-            std::cout << "here works - " << res << std::endl;
             break;
         }
         }
