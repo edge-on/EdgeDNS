@@ -66,7 +66,7 @@ private:
     int PORT = 53;
 
     bool isLogging = false;
-    bool rateLimiting = false;
+    bool rateLimiting = true;
 
     int threadCount = 1;
     std::vector<std::thread> threads;

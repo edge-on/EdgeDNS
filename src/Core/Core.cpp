@@ -93,6 +93,12 @@ void Core::initTCP(Gen::Thread &thread)
         perror("eod tcp listen");
     }
 
+    Gen::Connection conn;
+    conn.fd = thread.tcpFd;
+    conn.type = Gen::TCP;
+
+    thread.connections[thread.tcpFd] = std::move(conn);
+
     std::lock_guard<std::mutex> lock(coutMutex);
     std::cout << "TCP Socket Initalized On Thread " << thread.id << ".\n";
 }
@@ -148,6 +154,20 @@ void Core::worker(int th)
         if (res < 0)
         {
             // Close
+            auto it = thread.connections.find(fd);
+            if(it != thread.connections.end()) {
+                thread.connections.erase(fd);
+                close(fd);
+            }
+
+            // Multishot Accept
+            if (type == Gen::STATE_MULTISHOT_ACCEPT)
+            {
+                pipeline->queueMultishotAccept(fd);
+                io_uring_submit(ring);
+            }
+
+            continue;
         }
 
         if (type == Gen::STATE_MULTISHOT_ACCEPT)
@@ -207,7 +227,7 @@ void Core::worker(int th)
 
             if (cqe->res < 0)
             {
-                std::cerr << "recvmsg failed: " << strerror(-cqe->res) << std::endl;
+                std::cerr << "recvmsg failed: " << strerror(-cqe->res) << " - FD: " << conn.fd << " Res: " << res << std::endl;
                 pipeline->pool->releaseBuffer(buf_id);
                 break;
             }
@@ -493,7 +513,7 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
 
     if (qtype != 1)
     {
-        // response_flags |= 0x0005; // NOTIMP
+        response_flags |= 0x0005; // REFUSED
     }
 
     write16(response, response_flags);
@@ -512,7 +532,7 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
     {
         for (auto &record : matched_records)
         {
-            if (rateLimiting)
+            if (rateLimiting && !is_tcp)
             {
                 RRLKey key;
                 key.prefix = ip;
