@@ -5,7 +5,7 @@
 
 #include "index.hpp"
 
-#include "Cache/Mmap.hpp"
+#include "Cache/MmapRecords.hpp"
 
 namespace DB
 {
