@@ -20,32 +20,33 @@ typedef enum
     IP_GROUPS
 };
 
-struct __attribute__((packed)) System
+struct __attribute__((packed)) SystemMetadata
 {
-    uint64_t type;         // 8 Bytes
+    uint64_t type;    // 8 Bytes
     CassUuid version; // 16 Byte
 }; // 24 Byte
 
-class Mmap
+namespace System
 {
-private:
-    char *mmap_base = nullptr;
-    IndexBucket *hash_table = nullptr;
-    DNSRecord *data_records = nullptr;
+    class Mmap
+    {
+    private:
+        char *mmap_base = nullptr;
+        SystemMetadata *system_metadata = nullptr;
 
-    size_t total_file_size = 0;
-    int32_t free_list_head_idx = -1;
+        size_t total_file_size = 0;
+        int32_t free_list_head_idx = -1;
 
-    int32_t pop_free_slot();
-    void push_free_slot(int32_t slotidx);
-    size_t find_bucket(uint64_t hash, int32_t qtype) const;
+        void push_free_slot(int32_t slotidx);
+        size_t find_bucket(uint64_t hash, int32_t qtype) const;
 
-public:
-    bool init(const char *filepath);
+    public:
+        bool init(const char *filepath);
 
-    bool get_record(const int type, CassUuid &version);
-    bool append_record(const int type, CassUuid version);
-    bool delete_record(const int type);
+        bool get_record(const int type, CassUuid &version);
+        bool append_record(const int type, CassUuid version);
+        bool delete_record(const int type);
 
-    ~Mmap();
-};
+        ~Mmap();
+    };
+}

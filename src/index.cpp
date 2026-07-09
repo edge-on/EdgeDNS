@@ -1,14 +1,14 @@
 #include "index.hpp"
 
 Cassandra *Main::cas = nullptr;
-Mmap *Main::map = nullptr;
+Mmap *Main::recordsMap = nullptr;
 
 int main()
 {
     Static::dns->init();
 
-    Main::map = new Mmap();
-    Main::map->init("edgedns.db");
+    Main::recordsMap = new Mmap();
+    Main::recordsMap->init("dnsRecords.bin");
 
     Main::cas = new Cassandra();
     if (Main::cas->connect())

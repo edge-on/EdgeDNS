@@ -45,7 +45,6 @@ class Mmap
 private:
     char *mmap_base = nullptr;
     IndexBucket *hash_table = nullptr;
-    DNSRecord *data_records = nullptr;
 
     size_t total_file_size = 0;
     int32_t free_list_head_idx = -1;

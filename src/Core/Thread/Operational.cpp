@@ -30,7 +30,7 @@ void Operational::queueLifeCycle()
         queue.pop_front();
 
         if (rec.type == QueueType::ADD)
-            Main::map->append_record(rec.name, rec.qtype, rec.ttl, rec.prio, rec.val);
+            Main::recordsMap->append_record(rec.name, rec.qtype, rec.ttl, rec.prio, rec.val);
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }

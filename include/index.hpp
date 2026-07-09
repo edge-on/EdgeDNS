@@ -36,5 +36,5 @@ class Main
 {
 public:
     static Cassandra *cas;
-    static Mmap *map;
+    static Mmap *recordsMap;
 };
