@@ -1,12 +1,12 @@
-#include "Cache/MmapRecords.hpp"
+#include "Cache/MmapIpGroup.hpp"
 
-Records::Mmap::~Mmap()
+IpGroup::Mmap::~Mmap()
 {
     if (mmap_base)
         munmap(mmap_base, total_file_size);
 }
 
-bool Records::Mmap::init(const char *filepath)
+bool IpGroup::Mmap::init(const char *filepath)
 {
     size_t index_zone_size = HASH_TABLE_SIZE * sizeof(IndexBucket);
     size_t data_zone_size = MAX_DATA_RECORDS * sizeof(DNSRecord);
@@ -66,7 +66,7 @@ bool Records::Mmap::init(const char *filepath)
     return true;
 }
 
-bool Records::Mmap::get_record(const std::vector<uint8_t> &wire_name, int32_t qtype, std::vector<DNSResponseData> &out_records)
+bool IpGroup::Mmap::get_record(const std::vector<uint8_t> &wire_name, int32_t qtype, std::vector<DNSResponseData> &out_records)
 {
     out_records.clear();
     uint64_t hash = calculate_hash(wire_name);
@@ -96,7 +96,7 @@ bool Records::Mmap::get_record(const std::vector<uint8_t> &wire_name, int32_t qt
     return !out_records.empty();
 }
 
-bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, const std::vector<uint8_t> &binary_rdata)
+bool IpGroup::Mmap::append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, const std::vector<uint8_t> &binary_rdata)
 {
     if (binary_rdata.size() > data_records[0].payload.size())
     {
@@ -134,7 +134,7 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name, int32_t
     return true;
 }
 
-bool Records::Mmap::delete_record(const std::vector<uint8_t> &wire_name, int32_t qtype)
+bool IpGroup::Mmap::delete_record(const std::vector<uint8_t> &wire_name, int32_t qtype)
 {
     uint64_t hash = calculate_hash(wire_name);
     size_t bucket_idx = find_bucket(hash, qtype);
@@ -159,7 +159,7 @@ bool Records::Mmap::delete_record(const std::vector<uint8_t> &wire_name, int32_t
     return true;
 }
 
-uint64_t Records::Mmap::calculate_hash(const std::vector<uint8_t> &wire_name) const
+uint64_t IpGroup::Mmap::calculate_hash(const std::vector<uint8_t> &wire_name) const
 {
     uint64_t hash = 14695981039346656037ULL;
     for (uint8_t byte : wire_name)
@@ -174,7 +174,7 @@ uint64_t Records::Mmap::calculate_hash(const std::vector<uint8_t> &wire_name) co
     return hash;
 }
 
-int32_t Records::Mmap::pop_free_slot()
+int32_t IpGroup::Mmap::pop_free_slot()
 {
     if (free_list_head_idx == -1)
         return -1;
@@ -187,7 +187,7 @@ int32_t Records::Mmap::pop_free_slot()
     return allocated_idx;
 }
 
-void Records::Mmap::push_free_slot(int32_t slotidx)
+void IpGroup::Mmap::push_free_slot(int32_t slotidx)
 {
     data_records[slotidx].is_used = false;
     std::memset(data_records[slotidx].payload.data(), 0, data_records[slotidx].payload.size());
@@ -198,7 +198,7 @@ void Records::Mmap::push_free_slot(int32_t slotidx)
     free_list_head_idx = slotidx;
 }
 
-size_t Records::Mmap::find_bucket(uint64_t hash, int32_t qtype) const
+size_t IpGroup::Mmap::find_bucket(uint64_t hash, int32_t qtype) const
 {
     size_t index = hash & (HASH_TABLE_SIZE - 1);
     size_t start_index = index;

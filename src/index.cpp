@@ -1,14 +1,14 @@
 #include "index.hpp"
 
 Cassandra *Main::cas = nullptr;
-Mmap *Main::recordsMap = nullptr;
+Records::Mmap *Main::recordsMap = nullptr;
 System::Mmap *Main::systemMap = nullptr;
 
 int main()
 {
     Static::dns->init();
 
-    Main::recordsMap = new Mmap();
+    Main::recordsMap = new Records::Mmap();
     Main::recordsMap->init("local/dnsRecords.bin");
 
     Main::systemMap = new System::Mmap();

@@ -12,20 +12,20 @@
 #include <cstdint>
 #include <cassandra.h>
 
-typedef enum
-{
-    RECORDS,
-    IP_GROUPS
-};
-
-struct __attribute__((packed)) SystemMetadata
-{
-    uint64_t type;    // 8 Bytes
-    CassUuid version; // 16 Byte
-}; // 24 Byte
-
 namespace System
 {
+    typedef enum
+    {
+        RECORDS,
+        IP_GROUPS
+    };
+
+    struct __attribute__((packed)) SystemMetadata
+    {
+        uint64_t type;    // 8 Bytes
+        CassUuid version; // 16 Byte
+    }; // 24 Byte
+
     class Mmap
     {
     private:
