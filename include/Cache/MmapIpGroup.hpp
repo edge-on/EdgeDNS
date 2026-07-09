@@ -12,49 +12,58 @@
 #include <cstdint>
 #include <cassandra.h>
 
-namespace IpGroup
+namespace IpGroupEntry
 {
+    const size_t MAX_DATA_RECORDS = 50000;
+    const size_t HASH_TABLE_SIZE = 65536;
+
     struct __attribute__((packed)) IndexBucket
     {
         // Group ID
-        uint64_t time_and_version;   // 8 Byte
-        uint64_t clock_seq_and_node; // 8 Byte
-        int32_t head_slot_idx;       // 4 Byte
-    }; // 16 Byte
+        uint64_t group_id_hash; // 16 Byte
+        char country_code[8];   // 8 Byte
+        int64_t head_slot_idx;  // 8 Byte
+    }; // 32 Byte
 
-    struct __attribute__((packed)) IpGroupEntries
+    struct __attribute__((packed)) IpGroupEntry
     {
-        CassUuid version;    // 16 Byte
-        CassUuid group_id;   // 16 Byte
-        CassUuid id;         // 16 Byte
-        char countryCode[8]; // 8 Byte
-        uint8_t ip[4];       // 4 Byte
-        int priority;        // 4 Byte
-    }; // 64 Byte
+        CassUuid version;      // 16 Byte
+        CassUuid group_id;     // 16 Byte
+        CassUuid id;           // 16 Byte
+        char country_code[11]; // 11 Byte
+        uint8_t ip[4];         // 4 Byte
+        int priority;          // 4 Byte
+        bool is_used;          // 1 Byte
+        int32_t next_index;    // 4 byte
+    }; // 72 Byte
+
+    struct IpGroupEntryResponse
+    {
+        uint8_t *ip;
+        int priority;
+    };
 
     class Mmap
     {
     private:
         char *mmap_base = nullptr;
         IndexBucket *hash_table = nullptr;
+        IpGroupEntry *data_entries = nullptr;
 
         size_t total_file_size = 0;
         int32_t free_list_head_idx = -1;
 
-        uint64_t calculate_hash(const std::vector<uint8_t> &wire_name) const;
+        uint64_t calculate_hash_from_uuid(const CassUuid &uuid) const;
         int32_t pop_free_slot();
         void push_free_slot(int32_t slotidx);
-        size_t find_bucket(uint64_t hash, int32_t qtype) const;
-
-        const size_t MAX_DATA_RECORDS = 50000;
-        const size_t HASH_TABLE_SIZE = 65536;
+        size_t find_bucket(uint64_t hash, const char country_code[8], const CassUuid &groupId) const;
 
     public:
         bool init(const char *filepath);
 
-        bool get_record(const CassUuid uuid, int32_t qtype);
-        bool append_record(const CassUuid uuid, int32_t qtype, uint32_t ttl, uint16_t priority, const std::vector<uint8_t> &binary_rdata);
-        bool delete_record(const CassUuid uuid);
+        bool get_record(const CassUuid group_id, char country_code[8], std::vector<IpGroupEntryResponse> &out_entries);
+        bool append_record(const CassUuid group_id, IpGroupEntry entry);
+        bool delete_record(const CassUuid group_id, char country_code[8], int priority);
 
         ~Mmap();
     };

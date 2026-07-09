@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "Cache/MmapRecords.hpp"
+#include "Cache/MmapIpGroup.hpp"
 #include "Cache/MmapSystem.hpp"
 
 #include "Core/Core.hpp"
@@ -37,6 +38,8 @@ class Main
 {
 public:
     static Cassandra *cas;
+
     static Records::Mmap *recordsMap;
+    static IpGroupEntry::Mmap *ipGroupMap;
     static System::Mmap *systemMap;
 };

@@ -1,8 +1,8 @@
 #include "Cassandra/Record.hpp"
 
-std::vector<DNSResponseData> DB::Record::getRecord(std::string zone, std::string name, int type)
+std::vector<Records::DNSResponseData> DB::Record::getRecord(std::string zone, std::string name, int type)
 {
-    std::vector<DNSResponseData> res;
+    std::vector<Records::DNSResponseData> res;
 
     CassStatement *statement =
         cass_statement_new("SELECT * FROM edgeon.records WHERE zone = ? AND name = ? AND type = ?;", 3);
@@ -23,7 +23,7 @@ std::vector<DNSResponseData> DB::Record::getRecord(std::string zone, std::string
 
         while (cass_iterator_next(iterator))
         {
-            DNSResponseData data;
+            Records::DNSResponseData data;
 
             const CassRow *row = cass_iterator_get_row(iterator);
 

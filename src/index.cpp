@@ -2,6 +2,7 @@
 
 Cassandra *Main::cas = nullptr;
 Records::Mmap *Main::recordsMap = nullptr;
+IpGroupEntry::Mmap *Main::ipGroupMap = nullptr;
 System::Mmap *Main::systemMap = nullptr;
 
 int main()
@@ -10,6 +11,9 @@ int main()
 
     Main::recordsMap = new Records::Mmap();
     Main::recordsMap->init("local/dnsRecords.bin");
+
+    Main::ipGroupMap = new IpGroupEntry::Mmap();
+    Main::ipGroupMap->init("local/ipGroups.bin");
 
     Main::systemMap = new System::Mmap();
     Main::systemMap->init("local/system.meta");

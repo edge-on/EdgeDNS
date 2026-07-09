@@ -460,7 +460,7 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
     uint16_t response_flags = 0;
     uint16_t anc = 0;
 
-    std::vector<DNSResponseData> matched_records;
+    std::vector<Records::DNSResponseData> matched_records;
     bool cacheHit = Main::recordsMap->get_record(nameWire, qtype, matched_records);
 
     std::vector<uint8_t> zoneData;

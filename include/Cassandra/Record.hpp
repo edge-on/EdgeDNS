@@ -12,6 +12,6 @@ namespace DB
     class Record
     {
     public:
-        static std::vector<DNSResponseData> getRecord(std::string zone, std::string name, int type);
+        static std::vector<Records::DNSResponseData> getRecord(std::string zone, std::string name, int type);
     };
 } // namespace Cassandra
