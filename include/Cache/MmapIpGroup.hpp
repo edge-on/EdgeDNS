@@ -12,9 +12,6 @@
 #include <cstdint>
 #include <cassandra.h>
 
-const size_t MAX_DATA_RECORDS = 50000;
-const size_t HASH_TABLE_SIZE = 65536;
-
 struct __attribute__((packed)) IndexBucket
 {
     // Group ID
@@ -53,6 +50,9 @@ private:
     int32_t pop_free_slot();
     void push_free_slot(int32_t slotidx);
     size_t find_bucket(uint64_t hash, int32_t qtype) const;
+
+    const size_t MAX_DATA_RECORDS = 50000;
+    const size_t HASH_TABLE_SIZE = 65536;
 
 public:
     bool init(const char *filepath);

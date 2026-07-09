@@ -12,8 +12,6 @@
 #include <cstdint>
 #include <cassandra.h>
 
-const size_t MAX_DATA_RECORDS = 2;
-
 typedef enum
 {
     RECORDS,
@@ -39,6 +37,8 @@ namespace System
 
         void push_free_slot(int32_t slotidx);
         size_t find_bucket(uint64_t hash, int32_t qtype) const;
+
+        const size_t MAX_DATA_RECORDS = 2;
 
     public:
         bool init(const char *filepath);
