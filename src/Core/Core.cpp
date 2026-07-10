@@ -155,7 +155,8 @@ void Core::worker(int th)
         {
             // Close
             auto it = thread.connections.find(fd);
-            if(it != thread.connections.end()) {
+            if (it != thread.connections.end())
+            {
                 thread.connections.erase(fd);
                 close(fd);
             }
@@ -562,10 +563,9 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
                 }
             }
 
-            if(record.is_geo)  {
-                std::cout << "Here works" << std::endl;
-                record.rdata = RData::generateRData("1.1.1.1", 6);
-            }
+            // Here for just test
+            if (record.is_geo)
+                record.rdata = RData::generateRData("1.1.1.1", 1);
 
             uint16_t udp_limit = edns_class ? edns_class : 512;
             size_t rr_size =

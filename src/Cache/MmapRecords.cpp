@@ -86,6 +86,7 @@ bool Records::Mmap::get_record(const std::vector<uint8_t> &wire_name, int32_t qt
         DNSResponseData node;
         node.ttl = data_records[current_slot].ttl;
         node.priority = data_records[current_slot].priority;
+        node.is_geo = data_records[current_slot].is_geo;
 
         uint8_t len = data_records[current_slot].rdata_len;
         node.rdata.assign(data_records[current_slot].payload.begin(), data_records[current_slot].payload.begin() + len);
