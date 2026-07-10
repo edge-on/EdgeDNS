@@ -29,7 +29,7 @@ namespace Records
         int32_t next_index;               // 4 byte
         uint32_t ttl;                     // 4 byte
         uint16_t priority;                // 2 byte
-        bool is_ip_group;                 // 1 byte
+        bool is_geo;                      // 1 byte
         uint8_t rdata_len;                // 1 byte
         std::array<uint8_t, 251> payload; // 252 byte
     }; // 264 Byte
@@ -39,6 +39,7 @@ namespace Records
         uint32_t ttl;
         uint16_t priority;
         std::vector<uint8_t> rdata;
+        bool is_geo;
     };
 
     class Mmap
@@ -60,7 +61,7 @@ namespace Records
         bool init(const char *filepath);
 
         bool get_record(const std::vector<uint8_t> &wire_name, int32_t qtype, std::vector<DNSResponseData> &out_records);
-        bool append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, const std::vector<uint8_t> &binary_rdata);
+        bool append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, bool isGeo, const std::vector<uint8_t> &binary_rdata);
         bool delete_record(const std::vector<uint8_t> &wire_name, int32_t qtype);
 
         ~Mmap();

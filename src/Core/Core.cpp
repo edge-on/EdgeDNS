@@ -479,7 +479,7 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
 
         for (auto &rec : matched_records)
         {
-            Operational::addQueue(nameWire, qtype, rec.ttl, rec.priority, rec.rdata);
+            Operational::addQueue(nameWire, qtype, rec.ttl, rec.priority, rec.is_geo, rec.rdata);
         }
     }
 
@@ -560,6 +560,11 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
                 {
                     truncated = true;
                 }
+            }
+
+            if(record.is_geo)  {
+                std::cout << "Here works" << std::endl;
+                record.rdata = RData::generateRData("1.1.1.1", 6);
             }
 
             uint16_t udp_limit = edns_class ? edns_class : 512;

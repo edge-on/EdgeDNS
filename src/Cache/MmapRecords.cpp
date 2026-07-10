@@ -96,7 +96,7 @@ bool Records::Mmap::get_record(const std::vector<uint8_t> &wire_name, int32_t qt
     return !out_records.empty();
 }
 
-bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, const std::vector<uint8_t> &binary_rdata)
+bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, bool isGeo, const std::vector<uint8_t> &binary_rdata)
 {
     if (binary_rdata.size() > data_records[0].payload.size())
     {
@@ -116,6 +116,7 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name, int32_t
 
     data_records[new_slot_idx].ttl = ttl;
     data_records[new_slot_idx].priority = priority;
+    data_records[new_slot_idx].is_geo = isGeo;
     data_records[new_slot_idx].rdata_len = static_cast<uint8_t>(binary_rdata.size());
     std::memcpy(data_records[new_slot_idx].payload.data(), binary_rdata.data(), binary_rdata.size());
 

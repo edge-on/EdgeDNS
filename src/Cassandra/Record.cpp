@@ -30,6 +30,7 @@ std::vector<Records::DNSResponseData> DB::Record::getRecord(std::string zone, st
             const CassValue *ttlVal = cass_row_get_column_by_name(row, "ttl");
             const CassValue *prioVal = cass_row_get_column_by_name(row, "prio");
             const CassValue *dataVal = cass_row_get_column_by_name(row, "value");
+            const CassValue *isGeoVal = cass_row_get_column_by_name(row, "is_geo");
 
             uint32_t ttl;
             cass_value_get_uint32(ttlVal, &ttl);
@@ -41,10 +42,14 @@ std::vector<Records::DNSResponseData> DB::Record::getRecord(std::string zone, st
             size_t len;
             cass_value_get_string(dataVal, &value, &len);
 
+            cass_bool_t isGeo;
+            cass_value_get_bool(isGeoVal, &isGeo);
+
             data.ttl = ttl;
             data.priority = prio;
             data.rdata = RData::generateRData(value, type);
-
+            data.is_geo = isGeo;
+            
             res.emplace_back(data);
         }
 
