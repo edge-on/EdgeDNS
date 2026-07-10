@@ -27,14 +27,14 @@ namespace IpGroupEntry
 
     struct __attribute__((packed)) IpGroupEntry
     {
-        CassUuid version;      // 16 Byte
-        CassUuid group_id;     // 16 Byte
-        CassUuid id;           // 16 Byte
-        char country_code[11]; // 11 Byte
-        uint8_t ip[4];         // 4 Byte
-        int priority;          // 4 Byte
-        bool is_used;          // 1 Byte
-        int32_t next_index;    // 4 byte
+        CassUuid version;        // 16 Byte
+        CassUuid group_id;       // 16 Byte
+        CassUuid id;             // 16 Byte
+        char country_code[11];   // 11 Byte
+        uint8_t ip[4];           // 4 Byte
+        int priority;            // 4 Byte
+        bool is_used;            // 1 Byte
+        int32_t next_index = -1; // 4 byte
     }; // 72 Byte
 
     struct IpGroupEntryResponse
