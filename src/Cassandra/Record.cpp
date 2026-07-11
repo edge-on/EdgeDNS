@@ -109,8 +109,8 @@ std::vector<IpGroupEntry::IpGroupEntryResponse> DB::Record::getIpGroupEntriesCou
 
             uint32_t priority;
             cass_value_get_uint32(prioVal, &priority);
-
-            data.ip.assign(ip, ip + len);
+            
+            data.ip = RData::generateRData(ip, 1);
             data.priority = priority;
 
             res.emplace_back(data);

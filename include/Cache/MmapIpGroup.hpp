@@ -27,19 +27,18 @@ namespace IpGroupEntry
 
     struct __attribute__((packed)) IpGroupEntry
     {
-        CassUuid version;           // 16 Byte
         CassUuid group_id;          // 16 Byte
-        CassUuid id;                // 16 Byte
         char country_code[11];      // 11 Byte
-        std::array<uint8_t, 20> ip; // 20 Byte
+        std::array<uint8_t, 16> ip; // 16 Byte
+        int len;                    // 4 Byte
         int priority;               // 4 Byte
         bool is_used;               // 1 Byte
         int32_t next_index = -1;    // 4 byte
-    }; // 88 Byte
+    }; // 56 Byte
 
     struct IpGroupEntryResponse
     {
-        std::vector<char> ip;
+        std::vector<uint8_t> ip;
         int priority;
     };
 
@@ -62,7 +61,7 @@ namespace IpGroupEntry
         bool init(const char *filepath);
 
         bool get_record(const CassUuid group_id, char country_code[8], std::vector<IpGroupEntryResponse> &out_entries);
-        bool append_record(const CassUuid group_id, IpGroupEntry entry);
+        bool append_record(CassUuid groupId, char countryCode[8], std::vector<uint8_t> val, int priority);
         bool delete_record(const CassUuid group_id, char country_code[8], int priority);
 
         ~Mmap();

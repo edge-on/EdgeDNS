@@ -477,11 +477,6 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
         std::string zone = Utils::Vector::wireToDomain(zoneData.data(), zoneData.size());
 
         matched_records = DB::Record::getRecord(zone, name, qtype);
-
-        for (auto &rec : matched_records)
-        {
-            Operational::addQueue(nameWire, qtype, rec.ttl, rec.priority, rec.group_id, rec.is_geo, rec.rdata);
-        }
     }
 
     // ---------------- BUILD RESPONSE ----------------
@@ -532,6 +527,9 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
     {
         for (auto &record : matched_records)
         {
+            if (!cacheHit)
+                Operational::addQueueForRecord(nameWire, qtype, record);
+
             if (rateLimiting && !is_tcp)
             {
                 RRLKey key;
@@ -563,6 +561,8 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
                 }
             }
 
+
+
             if (record.is_geo)
             {
                 std::vector<IpGroupEntry::IpGroupEntryResponse> out_entries;
@@ -571,9 +571,18 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
                 if (out_entries.size() == 0)
                 {
                     out_entries = DB::Record::getIpGroupEntriesCountryBased(record.group_id, "AF");
-                }
 
-                record.rdata = RData::generateRData(out_entries[0].ip.data(), 1);
+                    for (auto &entry : out_entries)
+                    {
+                        Operational::addQueueForEntry(record.group_id, "AF", {entry.ip, entry.priority});
+                    }
+
+                    record.rdata = out_entries[0].ip;
+                }
+                else
+                {
+                    record.rdata = out_entries[0].ip;
+                }
             }
 
             uint16_t udp_limit = edns_class ? edns_class : 512;

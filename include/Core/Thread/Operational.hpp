@@ -10,7 +10,9 @@
 class Operational
 {
 public:
-    static void addQueue(const std::vector<uint8_t> &name, int qtype, int ttl, int prio, CassUuid groupId, bool isGeo, const std::vector<uint8_t> &val);
+    static void addQueueForRecord(const std::vector<uint8_t> &name, int qtype, Records::DNSResponseData record);
+    static void addQueueForEntry(CassUuid groupId, char countryCode[8], IpGroupEntry::IpGroupEntryResponse entry);
+
     static void queueLifeCycle();
 
     typedef enum
@@ -32,6 +34,16 @@ public:
 
         QueueType type;
     } Record;
+    static std::list<Record> recordQueue;
 
-    static std::list<Record> queue;
+    typedef struct
+    {
+        CassUuid groupId;
+        char countryCode[8];
+        std::vector<uint8_t> val;
+        int priority;
+
+        QueueType type;
+    } Entry;
+    static std::list<Entry> entryQueue;
 };

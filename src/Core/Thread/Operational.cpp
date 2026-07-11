@@ -1,38 +1,66 @@
 #include "Core/Thread/Operational.hpp"
 
-std::list<Operational::Record> Operational::queue;
+std::list<Operational::Record> Operational::recordQueue;
+std::list<Operational::Entry> Operational::entryQueue;
 
-void Operational::addQueue(const std::vector<uint8_t> &name, int qtype, int ttl, int prio, CassUuid groupId, bool isGeo, const std::vector<uint8_t> &val)
+void Operational::addQueueForRecord(const std::vector<uint8_t> &name, int qtype, Records::DNSResponseData req)
 {
     Operational::Record record;
     record.name = name;
     record.qtype = qtype;
-    record.ttl = ttl;
-    record.prio = prio;
-    record.val = val;
-    record.groupId = groupId;
-    record.isGeo = isGeo;
+    record.ttl = req.ttl;
+    record.prio = req.priority;
+    record.val = req.rdata;
+    record.groupId = req.group_id;
+    record.isGeo = req.is_geo;
+
     record.type = ADD;
 
-    queue.emplace_back(std::move(record));
+    recordQueue.emplace_back(std::move(record));
+}
+
+void Operational::addQueueForEntry(CassUuid groupId, char countryCode[8], IpGroupEntry::IpGroupEntryResponse req)
+{
+    Operational::Entry entry;
+    entry.val = req.ip;
+    entry.priority = req.priority;
+    entry.groupId = groupId;
+    memcpy(entry.countryCode, countryCode, 8);
+
+    entry.type = ADD;
+
+    entryQueue.emplace_back(std::move(entry));
 }
 
 void Operational::queueLifeCycle()
 {
     while (true)
     {
-        if (queue.empty())
+        if (recordQueue.empty() && entryQueue.empty())
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
 
-        Operational::Record rec;
-        rec = std::move(queue.front());
-        queue.pop_front();
+        if (!recordQueue.empty())
+        {
+            Operational::Record rec;
+            rec = std::move(recordQueue.front());
+            recordQueue.pop_front();
 
-        if (rec.type == QueueType::ADD)
-            Main::recordsMap->append_record(rec.name, rec.qtype, rec.ttl, rec.prio, rec.groupId, rec.isGeo, rec.val);
+            if (rec.type == QueueType::ADD)
+                Main::recordsMap->append_record(rec.name, rec.qtype, rec.ttl, rec.prio, rec.groupId, rec.isGeo, rec.val);
+        }
+
+        if (!entryQueue.empty())
+        {
+            Operational::Entry entry;
+            entry = std::move(entryQueue.front());
+            entryQueue.pop_front();
+
+            if(entry.type == QueueType::ADD)
+                Main::ipGroupMap->append_record(entry.groupId, entry.countryCode, entry.val, entry.priority);
+        }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
