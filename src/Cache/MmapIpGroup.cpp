@@ -58,7 +58,7 @@ bool IpGroupEntry::Mmap::init(const char *filepath)
             data_entries[i].is_used = false;
 
             std::memset(data_entries[i].country_code, 0, 11);
-            std::memset(data_entries[i].ip, 0, 4);
+            std::memset(data_entries[i].ip.data(), 0, 4);
         }
     }
     else
@@ -97,7 +97,7 @@ bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[8]
         }
         
         IpGroupEntryResponse node;
-        node.ip = data_entries[current_slot].ip;
+        // node.ip = data_entries[current_slot].ip;
         node.priority = data_entries[current_slot].priority;
 
         out_entries.push_back(node);
@@ -208,7 +208,7 @@ void IpGroupEntry::Mmap::push_free_slot(int32_t slotidx)
     data_entries[slotidx].is_used = false;
 
     std::memset(data_entries[slotidx].country_code, 0, 11);
-    std::memset(data_entries[slotidx].ip, 0, 4);
+    std::memset(data_entries[slotidx].ip.data(), 0, 4);
 
     data_entries[slotidx].group_id.clock_seq_and_node = 0;
     data_entries[slotidx].group_id.time_and_version = 0;

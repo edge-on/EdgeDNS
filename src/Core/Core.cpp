@@ -10,7 +10,7 @@ Core::~Core()
 
 void Core::start()
 {
-    threadCount = std::thread::hardware_concurrency();
+    threadCount = std::thread::hardware_concurrency() / 4;
 
     start_clock_thread();
 
@@ -563,7 +563,6 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
                 }
             }
 
-            // Here for just test
             if (record.is_geo)
             {
                 std::vector<IpGroupEntry::IpGroupEntryResponse> out_entries;
@@ -574,7 +573,7 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
                     out_entries = DB::Record::getIpGroupEntriesCountryBased(record.group_id, "AF");
                 }
 
-                std::cout << "Entries Size: " << out_entries.size() << std::endl;
+                record.rdata = RData::generateRData(out_entries[0].ip.data(), 1);
             }
 
             uint16_t udp_limit = edns_class ? edns_class : 512;

@@ -30,6 +30,7 @@ std::vector<Records::DNSResponseData> DB::Record::getRecord(std::string zone, st
             const CassValue *ttlVal = cass_row_get_column_by_name(row, "ttl");
             const CassValue *prioVal = cass_row_get_column_by_name(row, "prio");
             const CassValue *dataVal = cass_row_get_column_by_name(row, "value");
+            const CassValue *ipGroupVal = cass_row_get_column_by_name(row, "ip_group");
             const CassValue *isGeoVal = cass_row_get_column_by_name(row, "is_geo");
 
             uint32_t ttl;
@@ -49,7 +50,7 @@ std::vector<Records::DNSResponseData> DB::Record::getRecord(std::string zone, st
             data.priority = prio;
 
             if (isGeo)
-                cass_uuid_from_string(value, &data.group_id);
+                cass_value_get_uuid(ipGroupVal, &data.group_id);
             else
                 data.rdata = RData::generateRData(value, type);
 
@@ -76,7 +77,7 @@ std::vector<IpGroupEntry::IpGroupEntryResponse> DB::Record::getIpGroupEntriesCou
     {
         return res;
     }
-    
+
     CassStatement *statement =
         cass_statement_new("SELECT * FROM edgeon.ip_group_entries WHERE group_id = ? AND location_code = ?;", 2);
 
@@ -109,7 +110,7 @@ std::vector<IpGroupEntry::IpGroupEntryResponse> DB::Record::getIpGroupEntriesCou
             uint32_t priority;
             cass_value_get_uint32(prioVal, &priority);
 
-            memcpy(data.ip, ip, len);
+            data.ip.assign(ip, ip + len);
             data.priority = priority;
 
             res.emplace_back(data);
@@ -127,35 +128,34 @@ std::vector<IpGroupEntry::IpGroupEntryResponse> DB::Record::getIpGroupEntriesCou
 
 bool DB::Record::isCountryBasedRecordExist(CassUuid groupId, char countryCode[8])
 {
-    std::vector<IpGroupEntry::IpGroupEntryResponse> res;
-
-    CassStatement *statement =
-        cass_statement_new("SELECT COUNT(*) FROM edgeon.ip_group_entries WHERE group_id = ? AND location_code = ?;", 2);
+    bool exists = false;
+    CassStatement *statement = cass_statement_new("SELECT COUNT(*) as totalCount FROM edgeon.ip_group_entries WHERE group_id = ? AND location_code = ?;", 2);
 
     cass_statement_bind_uuid(statement, 0, groupId);
     cass_statement_bind_string(statement, 1, countryCode);
 
-    CassFuture *future =
-        cass_session_execute(Main::cas->session, statement);
-
+    CassFuture *future = cass_session_execute(Main::cas->session, statement);
     cass_future_wait(future);
 
     if (cass_future_error_code(future) == CASS_OK)
     {
         const CassResult *result = cass_future_get_result(future);
-        CassIterator *iterator = cass_iterator_from_result(result);
+        const CassRow *row = cass_result_first_row(result);
 
-        while (cass_iterator_next(iterator))
+        if (row)
         {
-            return true;
+            const CassValue *countVal = cass_row_get_column_by_name(row, "totalCount");
+            cass_int64_t count;
+            if (cass_value_get_int64(countVal, &count) == CASS_OK)
+            {
+                exists = (count > 0);
+            }
         }
-
-        cass_iterator_free(iterator);
         cass_result_free(result);
     }
 
     cass_future_free(future);
     cass_statement_free(statement);
 
-    return false;
+    return exists;
 }

@@ -33,7 +33,7 @@ namespace Records
         uint16_t priority;                // 2 byte
         bool is_geo;                      // 1 byte
         uint8_t rdata_len;                // 1 byte
-        CassUuid group_id;                 // 16 byte
+        CassUuid group_id;                // 16 byte
         std::array<uint8_t, 251> payload; // 252 byte
     }; // 280 Byte
 

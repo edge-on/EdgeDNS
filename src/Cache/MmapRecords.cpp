@@ -87,6 +87,7 @@ bool Records::Mmap::get_record(const std::vector<uint8_t> &wire_name, int32_t qt
         node.ttl = data_records[current_slot].ttl;
         node.priority = data_records[current_slot].priority;
         node.is_geo = data_records[current_slot].is_geo;
+        node.group_id = data_records[current_slot].group_id;
 
         if (!node.is_geo)
         {
@@ -122,8 +123,12 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name, int32_t
     data_records[new_slot_idx].priority = priority;
     data_records[new_slot_idx].group_id = group_id;
     data_records[new_slot_idx].is_geo = is_geo;
-    data_records[new_slot_idx].rdata_len = static_cast<uint8_t>(binary_rdata.size());
-    std::memcpy(data_records[new_slot_idx].payload.data(), binary_rdata.data(), binary_rdata.size());
+
+    if (!is_geo)
+    {
+        data_records[new_slot_idx].rdata_len = static_cast<uint8_t>(binary_rdata.size());
+        std::memcpy(data_records[new_slot_idx].payload.data(), binary_rdata.data(), binary_rdata.size());
+    }
 
     if (hash_table[bucket_idx].name_hash == 0)
     {
