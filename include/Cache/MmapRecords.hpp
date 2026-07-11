@@ -11,6 +11,8 @@
 #include <vector>
 #include <cstdint>
 
+#include <cassandra.h>
+
 namespace Records
 {
     const size_t MAX_DATA_RECORDS = 50000;
@@ -31,14 +33,16 @@ namespace Records
         uint16_t priority;                // 2 byte
         bool is_geo;                      // 1 byte
         uint8_t rdata_len;                // 1 byte
+        CassUuid group_id;                 // 16 byte
         std::array<uint8_t, 251> payload; // 252 byte
-    }; // 264 Byte
+    }; // 280 Byte
 
     struct DNSResponseData
     {
         uint32_t ttl;
         uint16_t priority;
         std::vector<uint8_t> rdata;
+        CassUuid group_id;
         bool is_geo;
     };
 
@@ -61,7 +65,7 @@ namespace Records
         bool init(const char *filepath);
 
         bool get_record(const std::vector<uint8_t> &wire_name, int32_t qtype, std::vector<DNSResponseData> &out_records);
-        bool append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, bool isGeo, const std::vector<uint8_t> &binary_rdata);
+        bool append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, CassUuid groupId, bool isGeo, const std::vector<uint8_t> &binary_rdata);
         bool delete_record(const std::vector<uint8_t> &wire_name, int32_t qtype);
 
         ~Mmap();

@@ -480,7 +480,7 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
 
         for (auto &rec : matched_records)
         {
-            Operational::addQueue(nameWire, qtype, rec.ttl, rec.priority, rec.is_geo, rec.rdata);
+            Operational::addQueue(nameWire, qtype, rec.ttl, rec.priority, rec.group_id, rec.is_geo, rec.rdata);
         }
     }
 
@@ -565,7 +565,17 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
 
             // Here for just test
             if (record.is_geo)
-                record.rdata = RData::generateRData("1.1.1.1", 1);
+            {
+                std::vector<IpGroupEntry::IpGroupEntryResponse> out_entries;
+                Main::ipGroupMap->get_record(record.group_id, "AF", out_entries);
+
+                if (out_entries.size() == 0)
+                {
+                    out_entries = DB::Record::getIpGroupEntriesCountryBased(record.group_id, "AF");
+                }
+
+                std::cout << "Entries Size: " << out_entries.size() << std::endl;
+            }
 
             uint16_t udp_limit = edns_class ? edns_class : 512;
             size_t rr_size =

@@ -47,9 +47,14 @@ std::vector<Records::DNSResponseData> DB::Record::getRecord(std::string zone, st
 
             data.ttl = ttl;
             data.priority = prio;
-            data.rdata = RData::generateRData(value, type);
+
+            if (isGeo)
+                cass_uuid_from_string(value, &data.group_id);
+            else
+                data.rdata = RData::generateRData(value, type);
+
             data.is_geo = isGeo;
-            
+
             res.emplace_back(data);
         }
 
@@ -61,4 +66,96 @@ std::vector<Records::DNSResponseData> DB::Record::getRecord(std::string zone, st
     cass_statement_free(statement);
 
     return res;
+}
+
+std::vector<IpGroupEntry::IpGroupEntryResponse> DB::Record::getIpGroupEntriesCountryBased(CassUuid groupId, char countryCode[8])
+{
+    std::vector<IpGroupEntry::IpGroupEntryResponse> res;
+
+    if (!isCountryBasedRecordExist(groupId, countryCode))
+    {
+        return res;
+    }
+    
+    CassStatement *statement =
+        cass_statement_new("SELECT * FROM edgeon.ip_group_entries WHERE group_id = ? AND location_code = ?;", 2);
+
+    cass_statement_bind_uuid(statement, 0, groupId);
+    cass_statement_bind_string(statement, 1, countryCode);
+
+    CassFuture *future =
+        cass_session_execute(Main::cas->session, statement);
+
+    cass_future_wait(future);
+
+    if (cass_future_error_code(future) == CASS_OK)
+    {
+        const CassResult *result = cass_future_get_result(future);
+        CassIterator *iterator = cass_iterator_from_result(result);
+
+        while (cass_iterator_next(iterator))
+        {
+            IpGroupEntry::IpGroupEntryResponse data;
+
+            const CassRow *row = cass_iterator_get_row(iterator);
+
+            const CassValue *ipVal = cass_row_get_column_by_name(row, "ip");
+            const CassValue *prioVal = cass_row_get_column_by_name(row, "priority");
+
+            const char *ip;
+            size_t len;
+            cass_value_get_string(ipVal, &ip, &len);
+
+            uint32_t priority;
+            cass_value_get_uint32(prioVal, &priority);
+
+            memcpy(data.ip, ip, len);
+            data.priority = priority;
+
+            res.emplace_back(data);
+        }
+
+        cass_iterator_free(iterator);
+        cass_result_free(result);
+    }
+
+    cass_future_free(future);
+    cass_statement_free(statement);
+
+    return res;
+}
+
+bool DB::Record::isCountryBasedRecordExist(CassUuid groupId, char countryCode[8])
+{
+    std::vector<IpGroupEntry::IpGroupEntryResponse> res;
+
+    CassStatement *statement =
+        cass_statement_new("SELECT COUNT(*) FROM edgeon.ip_group_entries WHERE group_id = ? AND location_code = ?;", 2);
+
+    cass_statement_bind_uuid(statement, 0, groupId);
+    cass_statement_bind_string(statement, 1, countryCode);
+
+    CassFuture *future =
+        cass_session_execute(Main::cas->session, statement);
+
+    cass_future_wait(future);
+
+    if (cass_future_error_code(future) == CASS_OK)
+    {
+        const CassResult *result = cass_future_get_result(future);
+        CassIterator *iterator = cass_iterator_from_result(result);
+
+        while (cass_iterator_next(iterator))
+        {
+            return true;
+        }
+
+        cass_iterator_free(iterator);
+        cass_result_free(result);
+    }
+
+    cass_future_free(future);
+    cass_statement_free(statement);
+
+    return false;
 }
