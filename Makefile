@@ -9,7 +9,7 @@ CC       := gcc
 # =========================
 CXXFLAGS := -std=c++20 -g3 -Wall -Wextra -Iinclude
 CFLAGS   := -Wall -Wextra -Iinclude 
-LDFLAGS  := -lxxhash -lssl -lcassandra -lDotenv -ltcmalloc -pthread -lmaxminddb -luring
+LDFLAGS  := -lxxhash -lssl -lcassandra -lDotenv -pthread -lmaxminddb -luring -ltcmalloc
 
 # =========================
 # DIRECTORIES

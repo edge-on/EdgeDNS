@@ -56,10 +56,7 @@ public:
     void initUDP(Gen::Thread &th);
     void initTCP(Gen::Thread &th);
 
-    void handleTCP(Gen::Connection &conn, Gen::Thread &th);
-    void writeTCP(Gen::Connection &conn, Gen::Thread &th);
-
-    void handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread, std::vector<uint8_t> &out);
+    ssize_t handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread, uint8_t (&out)[4096]);
 
     std::atomic<uint32_t> g_second;
     uint32_t now();

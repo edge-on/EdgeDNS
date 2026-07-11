@@ -11,7 +11,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define QUEUE_DEPTH 8192
+#define QUEUE_DEPTH 4096
 
 class Gen
 {
@@ -26,8 +26,10 @@ public:
 
         int type;
 
+        ssize_t len;
+
         std::vector<uint8_t> readBuffer;
-        std::vector<uint8_t> writeBuffer;
+        uint8_t writeBuffer[4096];
 
         int buf_group = 1;
 
@@ -70,10 +72,12 @@ public:
     struct Context
     {
         int fd;
-        std::vector<uint8_t> writeBuffer;
+        uint8_t writeBuffer[4096];
         sockaddr_storage peerAddr;
         socklen_t peerLen;
         iovec iov;
         msghdr msgHdr;
+
+        ssize_t len;
     };
 };

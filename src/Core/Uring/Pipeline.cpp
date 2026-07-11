@@ -5,7 +5,7 @@ void Pipeline::init(int t)
     thread = &Gen::activeThreads[t];
 
     pool = new BufferPool();
-    pool->setup(&thread->ring, 1024 * 1024 * 10, 2048, 1, 32768);
+    pool->setup(&thread->ring, 1024 * 1024, 2048, 1, 32768);
 }
 
 void Pipeline::queueMultishotAccept(int fd)
@@ -68,7 +68,7 @@ void Pipeline::queueWriteTcp(Gen::Connection &conn)
         return;
 
     uint64_t data = ((uint64_t)Gen::STATE_WRITE << 32) | (uint32_t)conn.fd;
-    io_uring_prep_send(sqe, conn.fd, conn.writeBuffer.data(), conn.writeBuffer.size(), 0);
+    io_uring_prep_send(sqe, conn.fd, conn.writeBuffer, conn.len, 0);
     io_uring_sqe_set_data(sqe, (void *)data);
 }
 

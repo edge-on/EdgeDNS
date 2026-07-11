@@ -10,7 +10,7 @@ Core::~Core()
 
 void Core::start()
 {
-    threadCount = std::thread::hardware_concurrency() / 4;
+    threadCount = 11;
 
     start_clock_thread();
 
@@ -108,9 +108,13 @@ void Core::worker(int th)
     Gen::Thread &thread = Gen::activeThreads[th];
 
     struct io_uring *ring = &thread.ring;
-    if (io_uring_queue_init(QUEUE_DEPTH, ring, 0) < 0)
+    struct io_uring_params params;
+    memset(&params, 0, sizeof(params));
+    params.flags = IORING_SETUP_SQPOLL;
+    params.sq_thread_idle = 2000;
+    if (io_uring_queue_init_params(QUEUE_DEPTH, ring, &params) < 0)
     {
-        perror("io uring queue init");
+        perror("io uring queue init with SQPOLL");
         return;
     }
 
@@ -263,7 +267,7 @@ void Core::worker(int th)
             switch (conn.type)
             {
             case Gen::TCP:
-                handle(queryBuf, true, conn.ip, conn.ip_str, thread, conn.writeBuffer);
+                conn.len = handle(queryBuf, true, conn.ip, conn.ip_str, thread, conn.writeBuffer);
                 pipeline->queueWriteTcp(conn);
                 io_uring_submit(ring);
                 break;
@@ -285,10 +289,10 @@ void Core::worker(int th)
                 memcpy(&ctx->peerAddr, &peerAddr, peerLen);
                 ctx->peerLen = peerLen;
 
-                handle(queryBuf, false, conn.ip, conn.ip_str, thread, ctx->writeBuffer);
+                ctx->len = handle(queryBuf, false, conn.ip, conn.ip_str, thread, ctx->writeBuffer);
 
-                ctx->iov.iov_base = ctx->writeBuffer.data();
-                ctx->iov.iov_len = ctx->writeBuffer.size();
+                ctx->iov.iov_base = ctx->writeBuffer;
+                ctx->iov.iov_len = ctx->len;
 
                 pipeline->queueWriteUdp(ctx);
                 io_uring_submit(ring);
@@ -313,34 +317,7 @@ void Core::worker(int th)
     }
 }
 
-void Core::handleTCP(Gen::Connection &conn, Gen::Thread &thread)
-{
-}
-
-void Core::writeTCP(Gen::Connection &conn, Gen::Thread &thread)
-{
-    while (!conn.writeBuffer.empty())
-    {
-        ssize_t sent = send(conn.fd,
-                            conn.writeBuffer.data(),
-                            conn.writeBuffer.size(),
-                            0);
-
-        if (sent < 0)
-        {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                return;
-            return;
-        }
-
-        conn.writeBuffer.erase(
-            conn.writeBuffer.begin(),
-            conn.writeBuffer.begin() + sent);
-    }
-}
-
-void Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str,
-                  Gen::Thread &thread, std::vector<uint8_t> &out)
+ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread, uint8_t (&out)[4096])
 {
     if (isLogging)
     {
@@ -397,20 +374,19 @@ void Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str,
             nameWire[i] += 32;
     }
 
-    uint8_t respBuf[4096];
     size_t rlen = 0;
 
     auto w16 = [&](uint16_t v)
     {
-        respBuf[rlen++] = (v >> 8) & 0xFF;
-        respBuf[rlen++] = v & 0xFF;
+        out[rlen++] = (v >> 8) & 0xFF;
+        out[rlen++] = v & 0xFF;
     };
     auto w32 = [&](uint32_t v)
     {
-        respBuf[rlen++] = (v >> 24) & 0xFF;
-        respBuf[rlen++] = (v >> 16) & 0xFF;
-        respBuf[rlen++] = (v >> 8) & 0xFF;
-        respBuf[rlen++] = v & 0xFF;
+        out[rlen++] = (v >> 24) & 0xFF;
+        out[rlen++] = (v >> 16) & 0xFF;
+        out[rlen++] = (v >> 8) & 0xFF;
+        out[rlen++] = v & 0xFF;
     };
 
     uint16_t response_flags = 0;
@@ -458,7 +434,7 @@ void Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str,
 
     size_t qstart = 12 + (is_tcp ? 2 : 0);
     size_t qbytes = question_end - qstart;
-    memcpy(respBuf + rlen, buffer + qstart, qbytes);
+    memcpy(out + rlen, buffer + qstart, qbytes);
     rlen += qbytes;
 
     // ---------------- ANSWER ----------------
@@ -528,7 +504,7 @@ void Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str,
             if (!is_tcp && rlen + rr_size > udp_limit)
                 truncated = true;
 
-            if (rlen + rr_size + 32 > sizeof(respBuf))
+            if (rlen + rr_size + 32 > sizeof(out))
                 truncated = true;
 
             if (!truncated)
@@ -542,13 +518,13 @@ void Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str,
                 {
                     w16(static_cast<uint16_t>(2 + record.rdata.size()));
                     w16(record.priority);
-                    memcpy(respBuf + rlen, record.rdata.data(), record.rdata.size());
+                    memcpy(out + rlen, record.rdata.data(), record.rdata.size());
                     rlen += record.rdata.size();
                 }
                 else
                 {
                     w16(static_cast<uint16_t>(record.rdata.size()));
-                    memcpy(respBuf + rlen, record.rdata.data(), record.rdata.size());
+                    memcpy(out + rlen, record.rdata.data(), record.rdata.size());
                     rlen += record.rdata.size();
                 }
 
@@ -561,35 +537,35 @@ void Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str,
         response_flags |= 0x0200; // TC
 
     // ---------------- FIX HEADER ----------------
-    respBuf[6] = (anc >> 8) & 0xFF;
-    respBuf[7] = anc & 0xFF;
-    respBuf[2] = (response_flags >> 8) & 0xFF;
-    respBuf[3] = response_flags & 0xFF;
-    respBuf[10] = 0;
-    respBuf[11] = 1;
+    out[6] = (anc >> 8) & 0xFF;
+    out[7] = anc & 0xFF;
+    out[2] = (response_flags >> 8) & 0xFF;
+    out[3] = response_flags & 0xFF;
+    out[10] = 0;
+    out[11] = 1;
 
     // OPT / EDNS0
-    if (rlen + 11 > sizeof(respBuf))
-        rlen = sizeof(respBuf) - 11;
+    if (rlen + 11 > sizeof(out))
+        rlen = sizeof(out) - 11;
 
-    respBuf[rlen++] = 0; // Name: . (Root)
-    w16(41);             // Type: OPT
-    w16(4096);           // Payload size
-    w32(0);              // TTL
-    w16(0);              // RDLEN
+    out[rlen++] = 0; // Name: . (Root)
+    w16(41);         // Type: OPT
+    w16(4096);       // Payload size
+    w32(0);          // TTL
+    w16(0);          // RDLEN
 
     if (is_tcp)
     {
-        out.resize(rlen + 2);
         out[0] = (rlen >> 8) & 0xFF;
         out[1] = rlen & 0xFF;
-        memcpy(out.data() + 2, respBuf, rlen);
+        memcpy(out + 2, out, rlen);
     }
     else
     {
-        out.resize(rlen);
-        memcpy(out.data(), respBuf, rlen);
+        memcpy(out, out, rlen);
     }
+
+    return rlen;
 }
 
 int Core::makeNonBlocking(int sfd)
