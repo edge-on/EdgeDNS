@@ -66,10 +66,10 @@ bool Records::Mmap::init(const char *filepath)
     return true;
 }
 
-bool Records::Mmap::get_record(const std::vector<uint8_t> &wire_name, int32_t qtype, std::vector<DNSResponseData> &out_records)
+bool Records::Mmap::get_record(const uint8_t *wire_name, size_t wire_len, int32_t qtype, std::vector<DNSResponseData> &out_records)
 {
     out_records.clear();
-    uint64_t hash = calculate_hash(wire_name);
+    uint64_t hash = calculate_hash(wire_name, wire_len);
     size_t bucket_idx = find_bucket(hash, qtype);
 
     if (bucket_idx == -1 || hash_table[bucket_idx].name_hash == 0)
@@ -92,7 +92,8 @@ bool Records::Mmap::get_record(const std::vector<uint8_t> &wire_name, int32_t qt
         if (!node.is_geo)
         {
             uint8_t len = data_records[current_slot].rdata_len;
-            node.rdata.assign(data_records[current_slot].payload.begin(), data_records[current_slot].payload.begin() + len);
+            node.rdata.assign(data_records[current_slot].payload.begin(),
+                              data_records[current_slot].payload.begin() + len);
         }
 
         out_records.push_back(node);
@@ -109,7 +110,7 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name, int32_t
         return false;
     }
 
-    uint64_t hash = calculate_hash(wire_name);
+    uint64_t hash = calculate_hash(wire_name.data(), wire_name.size());
     size_t bucket_idx = find_bucket(hash, qtype);
 
     if (bucket_idx == -1)
@@ -147,7 +148,7 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name, int32_t
 
 bool Records::Mmap::delete_record(const std::vector<uint8_t> &wire_name, int32_t qtype)
 {
-    uint64_t hash = calculate_hash(wire_name);
+    uint64_t hash = calculate_hash(wire_name.data(), wire_name.size());
     size_t bucket_idx = find_bucket(hash, qtype);
 
     if (bucket_idx == -1 || hash_table[bucket_idx].name_hash == 0)
@@ -170,11 +171,12 @@ bool Records::Mmap::delete_record(const std::vector<uint8_t> &wire_name, int32_t
     return true;
 }
 
-uint64_t Records::Mmap::calculate_hash(const std::vector<uint8_t> &wire_name) const
+uint64_t Records::Mmap::calculate_hash(const uint8_t *wire_name, size_t len) const
 {
     uint64_t hash = 14695981039346656037ULL;
-    for (uint8_t byte : wire_name)
+    for (size_t i = 0; i < len; ++i)
     {
+        uint8_t byte = wire_name[i];
         if (byte >= 65 && byte <= 90)
         {
             byte += 32;

@@ -153,15 +153,24 @@ void Core::worker(int th)
 
         if (res < 0)
         {
-            // Close
             auto it = thread.connections.find(fd);
             if (it != thread.connections.end())
             {
-                thread.connections.erase(fd);
-                close(fd);
+                Gen::Connection &errConn = it->second;
+
+                if (errConn.type == Gen::UDP && fd == thread.udpFd)
+                {
+                    std::cerr << "UDP recv error, re-arming: " << strerror(-res) << std::endl;
+                    pipeline->queueRead(errConn);
+                    io_uring_submit(ring);
+                }
+                else
+                {
+                    thread.connections.erase(fd);
+                    close(fd);
+                }
             }
 
-            // Multishot Accept
             if (type == Gen::STATE_MULTISHOT_ACCEPT)
             {
                 pipeline->queueMultishotAccept(fd);
@@ -185,7 +194,7 @@ void Core::worker(int th)
 
             if (getpeername(clientFd, (struct sockaddr *)&addr, &len) == 0)
             {
-                char ip_str[INET6_ADDRSTRLEN];
+                char ip_str[INET6_ADDRSTRLEN] = {0};
 
                 if (addr.ss_family == AF_INET)
                 {
@@ -223,20 +232,22 @@ void Core::worker(int th)
         case Gen::STATE_READ:
         {
             int buf_id = cqe->flags >> IORING_CQE_BUFFER_SHIFT;
-            char *raw = pipeline->pool->getBufferAddress(buf_id);
+            int group_id = conn.buf_group;
+            char *raw = pipeline->pool->getBufferAddress(group_id, buf_id);
             size_t buf_size = pipeline->pool->getBufferSize();
 
             if (cqe->res < 0)
             {
-                std::cerr << "recvmsg failed: " << strerror(-cqe->res) << " - FD: " << conn.fd << " Res: " << res << std::endl;
-                pipeline->pool->releaseBuffer(buf_id);
+                std::cerr << "recvmsg failed: " << strerror(-cqe->res)
+                          << " - FD: " << conn.fd << " Res: " << cqe->res << std::endl;
+                pipeline->pool->releaseBuffer(group_id, buf_id);
                 break;
             }
 
             struct io_uring_recvmsg_out *o = io_uring_recvmsg_validate(raw, cqe->res, &conn.msgHdr);
             if (!o)
             {
-                pipeline->pool->releaseBuffer(buf_id);
+                pipeline->pool->releaseBuffer(group_id, buf_id);
                 break;
             }
 
@@ -247,17 +258,16 @@ void Core::worker(int th)
             size_t queryLen = std::min(payload_len, sizeof(queryBuf));
             memcpy(queryBuf, payload, queryLen);
 
-            pipeline->pool->releaseBuffer(buf_id);
+            pipeline->pool->releaseBuffer(group_id, buf_id);
 
             switch (conn.type)
             {
             case Gen::TCP:
-
-                conn.writeBuffer = handle(queryBuf, true, conn.ip, conn.ip_str, thread);
-
+                handle(queryBuf, true, conn.ip, conn.ip_str, thread, conn.writeBuffer);
                 pipeline->queueWriteTcp(conn);
                 io_uring_submit(ring);
                 break;
+
             case Gen::UDP:
             {
                 sockaddr_storage peerAddr;
@@ -275,7 +285,7 @@ void Core::worker(int th)
                 memcpy(&ctx->peerAddr, &peerAddr, peerLen);
                 ctx->peerLen = peerLen;
 
-                ctx->writeBuffer = handle(queryBuf, false, ((sockaddr_in *)&peerAddr)->sin_addr.s_addr, ipStr, thread);
+                handle(queryBuf, false, conn.ip, conn.ip_str, thread, ctx->writeBuffer);
 
                 ctx->iov.iov_base = ctx->writeBuffer.data();
                 ctx->iov.iov_len = ctx->writeBuffer.size();
@@ -285,6 +295,13 @@ void Core::worker(int th)
                 break;
             }
             }
+
+            if (!hasMore)
+            {
+                pipeline->queueRead(conn);
+                io_uring_submit(ring);
+            }
+
             break;
         }
 
@@ -298,53 +315,6 @@ void Core::worker(int th)
 
 void Core::handleTCP(Gen::Connection &conn, Gen::Thread &thread)
 {
-    uint8_t temp[4096];
-    ssize_t n = read(conn.fd, temp, sizeof(temp));
-
-    if (n <= 0)
-        return;
-
-    conn.readBuffer.insert(conn.readBuffer.end(), temp, temp + n);
-
-    while (true)
-    {
-        if (conn.expectedLength == 0)
-        {
-            if (conn.readBuffer.size() < 2)
-                return;
-
-            conn.expectedLength =
-                (conn.readBuffer[0] << 8) |
-                (conn.readBuffer[1]);
-
-            conn.readBuffer.erase(conn.readBuffer.begin(),
-                                  conn.readBuffer.begin() + 2);
-        }
-
-        if (conn.readBuffer.size() < conn.expectedLength)
-            return;
-
-        std::vector<uint8_t> dnsPacket(
-            conn.readBuffer.begin(),
-            conn.readBuffer.begin() + conn.expectedLength);
-
-        conn.readBuffer.erase(conn.readBuffer.begin(),
-                              conn.readBuffer.begin() + conn.expectedLength);
-
-        conn.expectedLength = 0;
-
-        auto response = handle(dnsPacket.data(), true, conn.ip, conn.ip_str, thread);
-
-        uint16_t len = htons(response.size());
-
-        conn.writeBuffer.insert(conn.writeBuffer.end(),
-                                (uint8_t *)&len,
-                                (uint8_t *)&len + 2);
-
-        conn.writeBuffer.insert(conn.writeBuffer.end(),
-                                response.begin(),
-                                response.end());
-    }
 }
 
 void Core::writeTCP(Gen::Connection &conn, Gen::Thread &thread)
@@ -369,7 +339,8 @@ void Core::writeTCP(Gen::Connection &conn, Gen::Thread &thread)
     }
 }
 
-std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread)
+void Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str,
+                  Gen::Thread &thread, std::vector<uint8_t> &out)
 {
     if (isLogging)
     {
@@ -377,31 +348,15 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
     }
 
     bool truncated = false;
-
     size_t offset = is_tcp ? 2 : 0;
 
-    auto read16 = [&](void)
+    auto read16 = [&]() -> uint16_t
     {
         uint16_t v = (buffer[offset] << 8) | buffer[offset + 1];
         offset += 2;
         return v;
     };
 
-    auto write16 = [&](std::vector<uint8_t> &out, uint16_t v)
-    {
-        out.push_back((v >> 8) & 0xFF);
-        out.push_back(v & 0xFF);
-    };
-
-    auto write32 = [&](std::vector<uint8_t> &out, uint32_t v)
-    {
-        out.push_back((v >> 24) & 0xFF);
-        out.push_back((v >> 16) & 0xFF);
-        out.push_back((v >> 8) & 0xFF);
-        out.push_back(v & 0xFF);
-    };
-
-    // ---------------- HEADER ----------------
     uint16_t transaction_id = read16();
     uint16_t flags = read16();
     uint16_t qdcount = read16();
@@ -409,10 +364,7 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
     read16(); // nscount
     read16(); // arcount
 
-    // ---------------- READ QNAME ----------------
-    std::vector<uint8_t> nameWire;
-    nameWire.reserve(256);
-
+    uint8_t nameWire[256];
     size_t name_start = offset;
 
     while (buffer[offset] != 0)
@@ -420,115 +372,102 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
         uint8_t len = buffer[offset++];
         offset += len;
     }
+    offset++;
 
-    offset++; // root
+    size_t nameLen = offset - name_start;
+    if (nameLen > sizeof(nameWire))
+        nameLen = sizeof(nameWire);
 
-    nameWire.insert(nameWire.end(),
-                    buffer + name_start,
-                    buffer + offset);
+    memcpy(nameWire, buffer + name_start, nameLen);
 
     uint16_t qtype = read16();
     uint16_t qclass = read16();
-
     size_t question_end = offset;
 
-    // ---------------- READ ADDITIONAL ----------------
-    // NAME
-    offset++;
-
+    offset++; // NAME (root, tek byte)
     uint16_t edns_type = read16();
     uint16_t edns_class = read16();
+    read16(); // TTL hi
+    read16(); // TTL lo
+    read16(); // RDLEN
 
-    // TTL
-    read16();
-    read16();
-
-    // RDLEN
-    read16();
-
-    // ---------------- FIND ZONE (Longest suffix) ----------------
-    for (auto &byte : nameWire)
+    for (size_t i = 0; i < nameLen; i++)
     {
-        if (byte >= 'A' && byte <= 'Z')
-        {
-            byte += 32;
-        }
+        if (nameWire[i] >= 'A' && nameWire[i] <= 'Z')
+            nameWire[i] += 32;
     }
 
-    std::vector<uint8_t> response;
-    response.reserve(512);
+    uint8_t respBuf[4096];
+    size_t rlen = 0;
+
+    auto w16 = [&](uint16_t v)
+    {
+        respBuf[rlen++] = (v >> 8) & 0xFF;
+        respBuf[rlen++] = v & 0xFF;
+    };
+    auto w32 = [&](uint32_t v)
+    {
+        respBuf[rlen++] = (v >> 24) & 0xFF;
+        respBuf[rlen++] = (v >> 16) & 0xFF;
+        respBuf[rlen++] = (v >> 8) & 0xFF;
+        respBuf[rlen++] = v & 0xFF;
+    };
 
     uint16_t response_flags = 0;
     uint16_t anc = 0;
 
-    std::vector<Records::DNSResponseData> matched_records;
-    bool cacheHit = Main::recordsMap->get_record(nameWire, qtype, matched_records);
+    t_matchedRecords.clear();
 
-    std::vector<uint8_t> zoneData;
+    bool cacheHit = Main::recordsMap->get_record(nameWire, nameLen, qtype, t_matchedRecords);
+
+    uint8_t zoneBuf[256];
+    size_t zoneLen = 0;
+
     if (!cacheHit || rateLimiting)
     {
-        zoneData = Utils::Vector::getHostWireFromWire(nameWire.data(), nameWire.size());
+        zoneLen = Utils::Vector::getHostWireFromWireNoAlloc(
+            nameWire, nameLen, zoneBuf, sizeof(zoneBuf));
     }
 
     if (!cacheHit)
     {
-        // Go To DB, Take the data and append to mmap
-        std::string name = Utils::Vector::wireToDomain(nameWire.data(), nameWire.size());
-        std::string zone = Utils::Vector::wireToDomain(zoneData.data(), zoneData.size());
-
-        matched_records = DB::Record::getRecord(zone, name, qtype);
+        std::string name = Utils::Vector::wireToDomain(nameWire, nameLen);
+        std::string zone = Utils::Vector::wireToDomain(zoneBuf, zoneLen);
+        t_matchedRecords = DB::Record::getRecord(zone, name, qtype);
     }
 
     // ---------------- BUILD RESPONSE ----------------
-
-    /*
-    0 → NOERROR
-    1 → FORMERR
-    2 → SERVFAIL
-    3 → NXDOMAIN
-    4 → NOTIMP
-    5 → REFUSED
-    */
-
-    write16(response, transaction_id);
+    w16(transaction_id);
 
     response_flags |= 0x8000;           // QR
     response_flags |= (flags & 0x0100); // RD mirror
     response_flags |= 0x0400;           // AA
 
     if (qclass != 1)
-    {
         response_flags |= 0x0004; // NOTIMP
-    }
-
     if (qdcount != 1)
-    {
-        response_flags |= 0x0001; // FORMER
-    }
-
+        response_flags |= 0x0001; // FORMERR
     if (qtype != 1)
-    {
         response_flags |= 0x0005; // REFUSED
-    }
 
-    write16(response, response_flags);
-    write16(response, 1); // QDCOUNT
-    write16(response, 0); // ANCOUNT placeholder
-    write16(response, 0); // NSCOUNT
-    write16(response, 0); // ARCOUNT
+    w16(response_flags);
+    w16(1); // QDCOUNT
+    w16(0); // ANCOUNT placeholder
+    w16(0); // NSCOUNT
+    w16(0); // ARCOUNT
 
-    // copy question
-    response.insert(response.end(),
-                    buffer + (12 + (is_tcp ? 2 : 0)),
-                    buffer + question_end);
+    size_t qstart = 12 + (is_tcp ? 2 : 0);
+    size_t qbytes = question_end - qstart;
+    memcpy(respBuf + rlen, buffer + qstart, qbytes);
+    rlen += qbytes;
 
     // ---------------- ANSWER ----------------
     if (qclass == 1 && qdcount == 1)
     {
-        for (auto &record : matched_records)
+        for (auto &record : t_matchedRecords)
         {
             if (!cacheHit)
-                Operational::addQueueForRecord(nameWire, qtype, record);
+                Operational::addQueueForRecord(nameWire, nameLen, qtype, record);
 
             if (rateLimiting && !is_tcp)
             {
@@ -537,12 +476,10 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
                 key.rcode = 0;
 
                 uint32_t zone;
-                memcpy(&zone, zoneData.data(), sizeof(uint32_t));
-
+                memcpy(&zone, zoneBuf, sizeof(uint32_t));
                 key.zone_id = zone;
 
                 uint32_t current = now();
-
                 auto &bucket = thread.rrlBuckets[key];
 
                 if (bucket.window_start != current)
@@ -556,32 +493,26 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
                 }
 
                 if (bucket.responses > threshold)
-                {
                     truncated = true;
-                }
             }
-
-
 
             if (record.is_geo)
             {
-                std::vector<IpGroupEntry::IpGroupEntryResponse> out_entries;
-                Main::ipGroupMap->get_record(record.group_id, "AF", out_entries);
+                t_ipGroupEntries.clear();
+                Main::ipGroupMap->get_record(record.group_id, "AF", t_ipGroupEntries);
 
-                if (out_entries.size() == 0)
+                if (t_ipGroupEntries.empty())
                 {
-                    out_entries = DB::Record::getIpGroupEntriesCountryBased(record.group_id, "AF");
+                    t_ipGroupEntries = DB::Record::getIpGroupEntriesCountryBased(record.group_id, "AF");
 
-                    for (auto &entry : out_entries)
-                    {
+                    for (auto &entry : t_ipGroupEntries)
                         Operational::addQueueForEntry(record.group_id, "AF", {entry.ip, entry.priority});
-                    }
 
-                    record.rdata = out_entries[0].ip;
+                    record.rdata = t_ipGroupEntries[0].ip;
                 }
                 else
                 {
-                    record.rdata = out_entries[0].ip;
+                    record.rdata = t_ipGroupEntries[0].ip;
                 }
             }
 
@@ -594,79 +525,71 @@ std::vector<uint8_t> Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, cha
                 2 + // rdlen
                 record.rdata.size();
 
-            if (!is_tcp && response.size() + rr_size > udp_limit)
-            {
+            if (!is_tcp && rlen + rr_size > udp_limit)
                 truncated = true;
-            }
+
+            if (rlen + rr_size + 32 > sizeof(respBuf))
+                truncated = true;
 
             if (!truncated)
             {
-                write16(response, 0xC00C); // pointer
-                write16(response, qtype);
-                write16(response, 1); // IN (qclass)
-                write32(response, record.ttl);
+                w16(0xC00C); // pointer
+                w16(qtype);
+                w16(1); // IN
+                w32(record.ttl);
 
-                if (qtype == 15)
+                if (qtype == 15) // MX
                 {
-                    write16(response, static_cast<uint16_t>(2 + record.rdata.size()));
-                    write16(response, record.priority);
-                    response.insert(response.end(), record.rdata.begin(), record.rdata.end());
-                }
-                else if (qtype == 16)
-                {
-                    write16(response, static_cast<uint16_t>(record.rdata.size()));
-
-                    response.insert(response.end(), record.rdata.begin(), record.rdata.end());
+                    w16(static_cast<uint16_t>(2 + record.rdata.size()));
+                    w16(record.priority);
+                    memcpy(respBuf + rlen, record.rdata.data(), record.rdata.size());
+                    rlen += record.rdata.size();
                 }
                 else
                 {
-                    write16(response, record.rdata.size());
-
-                    response.insert(response.end(),
-                                    record.rdata.begin(),
-                                    record.rdata.end());
+                    w16(static_cast<uint16_t>(record.rdata.size()));
+                    memcpy(respBuf + rlen, record.rdata.data(), record.rdata.size());
+                    rlen += record.rdata.size();
                 }
 
                 anc++;
             }
         }
-
-        if (anc == 0)
-        {
-            // NOERROR, empty answer
-        }
     }
 
     if (truncated)
-    {
-        response_flags |= 0x0200; // TC (TCP) Truncated
-    }
+        response_flags |= 0x0200; // TC
 
     // ---------------- FIX HEADER ----------------
-    response[6] = (anc >> 8) & 0xFF;
-    response[7] = anc & 0xFF;
+    respBuf[6] = (anc >> 8) & 0xFF;
+    respBuf[7] = anc & 0xFF;
+    respBuf[2] = (response_flags >> 8) & 0xFF;
+    respBuf[3] = response_flags & 0xFF;
+    respBuf[10] = 0;
+    respBuf[11] = 1;
 
-    response[2] = (response_flags >> 8) & 0xFF;
-    response[3] = response_flags & 0xFF;
+    // OPT / EDNS0
+    if (rlen + 11 > sizeof(respBuf))
+        rlen = sizeof(respBuf) - 11;
 
-    response[10] = 0;
-    response[11] = 1;
-
-    response.push_back(0);   // Name: . (Root)
-    write16(response, 41);   // Type: OPT (EDNS0)
-    write16(response, 4096); // Payload size: 4096
-    write32(response, 0);    // TTL: 0
-    write16(response, 0);    // RDLEN: 0
+    respBuf[rlen++] = 0; // Name: . (Root)
+    w16(41);             // Type: OPT
+    w16(4096);           // Payload size
+    w32(0);              // TTL
+    w16(0);              // RDLEN
 
     if (is_tcp)
     {
-        std::vector<uint8_t> res;
-        write16(res, response.size());
-        res.insert(res.end(), response.begin(), response.end());
-        return res;
+        out.resize(rlen + 2);
+        out[0] = (rlen >> 8) & 0xFF;
+        out[1] = rlen & 0xFF;
+        memcpy(out.data() + 2, respBuf, rlen);
     }
     else
-        return response;
+    {
+        out.resize(rlen);
+        memcpy(out.data(), respBuf, rlen);
+    }
 }
 
 int Core::makeNonBlocking(int sfd)

@@ -35,6 +35,9 @@
 
 #include "Core/Uring/Pipeline.hpp"
 
+inline thread_local std::vector<Records::DNSResponseData> t_matchedRecords;
+inline thread_local std::vector<IpGroupEntry::IpGroupEntryResponse> t_ipGroupEntries;
+
 class Core
 {
 public:
@@ -56,7 +59,7 @@ public:
     void handleTCP(Gen::Connection &conn, Gen::Thread &th);
     void writeTCP(Gen::Connection &conn, Gen::Thread &th);
 
-    std::vector<uint8_t> handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread);
+    void handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Gen::Thread &thread, std::vector<uint8_t> &out);
 
     std::atomic<uint32_t> g_second;
     uint32_t now();

@@ -10,7 +10,7 @@
 class Operational
 {
 public:
-    static void addQueueForRecord(const std::vector<uint8_t> &name, int qtype, Records::DNSResponseData record);
+    static void addQueueForRecord(const uint8_t *name, size_t nameLen, int qtype, Records::DNSResponseData req);
     static void addQueueForEntry(CassUuid groupId, char countryCode[8], IpGroupEntry::IpGroupEntryResponse entry);
 
     static void queueLifeCycle();

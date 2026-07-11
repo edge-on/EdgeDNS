@@ -3,10 +3,11 @@
 std::list<Operational::Record> Operational::recordQueue;
 std::list<Operational::Entry> Operational::entryQueue;
 
-void Operational::addQueueForRecord(const std::vector<uint8_t> &name, int qtype, Records::DNSResponseData req)
+void Operational::addQueueForRecord(const uint8_t *name, size_t nameLen, int qtype, Records::DNSResponseData req)
 {
     Operational::Record record;
-    record.name = name;
+    record.name.assign(name, name + nameLen);
+
     record.qtype = qtype;
     record.ttl = req.ttl;
     record.prio = req.priority;
@@ -58,7 +59,7 @@ void Operational::queueLifeCycle()
             entry = std::move(entryQueue.front());
             entryQueue.pop_front();
 
-            if(entry.type == QueueType::ADD)
+            if (entry.type == QueueType::ADD)
                 Main::ipGroupMap->append_record(entry.groupId, entry.countryCode, entry.val, entry.priority);
         }
 

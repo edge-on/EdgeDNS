@@ -29,6 +29,8 @@ public:
         std::vector<uint8_t> readBuffer;
         std::vector<uint8_t> writeBuffer;
 
+        int buf_group = 1;
+
         struct msghdr msgHdr{};
 
         uint16_t expectedLength = 0;

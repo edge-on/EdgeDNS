@@ -56,7 +56,7 @@ namespace Records
         size_t total_file_size = 0;
         int32_t free_list_head_idx = -1;
 
-        uint64_t calculate_hash(const std::vector<uint8_t> &wire_name) const;
+        uint64_t calculate_hash(const uint8_t *wire_name, size_t len) const;
         int32_t pop_free_slot();
         void push_free_slot(int32_t slotidx);
         size_t find_bucket(uint64_t hash, int32_t qtype) const;
@@ -64,7 +64,9 @@ namespace Records
     public:
         bool init(const char *filepath);
 
-        bool get_record(const std::vector<uint8_t> &wire_name, int32_t qtype, std::vector<DNSResponseData> &out_records);
+        bool get_record(const uint8_t *wire_name, size_t wire_len, int32_t qtype,
+                        std::vector<DNSResponseData> &out_records);
+
         bool append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, CassUuid groupId, bool isGeo, const std::vector<uint8_t> &binary_rdata);
         bool delete_record(const std::vector<uint8_t> &wire_name, int32_t qtype);
 

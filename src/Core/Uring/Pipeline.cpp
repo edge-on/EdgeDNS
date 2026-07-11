@@ -5,7 +5,7 @@ void Pipeline::init(int t)
     thread = &Gen::activeThreads[t];
 
     pool = new BufferPool();
-    pool->setup(&thread->ring, 1024 * 32, 2048, 1);
+    pool->setup(&thread->ring, 1024 * 1024 * 10, 2048, 1, 32768);
 }
 
 void Pipeline::queueMultishotAccept(int fd)
@@ -32,9 +32,11 @@ void Pipeline::queueRead(Gen::Connection &conn)
     conn.msgHdr.msg_namelen = sizeof(struct sockaddr_storage);
     conn.msgHdr.msg_controllen = 0;
 
+    conn.buf_group = pool->pickGroup();
+
     io_uring_prep_recvmsg_multishot(sqe, conn.fd, &conn.msgHdr, 0);
     sqe->flags |= IOSQE_BUFFER_SELECT;
-    sqe->buf_group = 1;
+    sqe->buf_group = (uint16_t)conn.buf_group;
     io_uring_sqe_set_data(sqe, (void *)data);
 }
 
