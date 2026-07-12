@@ -68,7 +68,8 @@ public:
     typedef enum
     {
         UDP,
-        TCP
+        TCP,
+        SYNC
     };
 
     struct Context

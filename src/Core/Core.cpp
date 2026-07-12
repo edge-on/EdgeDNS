@@ -120,8 +120,12 @@ void Core::worker(int th)
     initUDP(thread);
     initTCP(thread);
 
-    pipeline->queueRead(thread.connections[thread.udpFd]);
+    Sync::initSync(2987, thread);
+
     pipeline->queueMultishotAccept(thread.tcpFd);
+    pipeline->queueMultishotAccept(thread.syncFd);
+
+    pipeline->queueRead(thread.connections[thread.udpFd]);
 
     io_uring_submit(ring);
 
@@ -182,7 +186,7 @@ void Core::worker(int th)
 
         if (type == Gen::STATE_MULTISHOT_ACCEPT)
         {
-            int t = Gen::TCP;
+            int t = fd == thread.tcpFd ? Gen::TCP : Gen::SYNC;
             int clientFd = res;
 
             Gen::Connection conn;
@@ -211,7 +215,11 @@ void Core::worker(int th)
                 conn.ip_str = ip_str;
             }
 
-            conn.type = Gen::TCP;
+            if (conn.type == Gen::SYNC && strcmp(conn.ip_str, "127.0.0.1") != 0)
+            {
+                close(res);
+                continue;
+            }
 
             thread.connections[clientFd] = std::move(conn);
 
@@ -236,7 +244,7 @@ void Core::worker(int th)
             char *raw = pipeline->pool->getBufferAddress(group_id, buf_id);
             size_t buf_size = pipeline->pool->getBufferSize();
 
-            if (cqe->res < 0)
+            if (res < 0)
             {
                 std::cerr << "recvmsg failed: " << strerror(-cqe->res)
                           << " - FD: " << conn.fd << " Res: " << cqe->res << std::endl;
@@ -254,7 +262,7 @@ void Core::worker(int th)
             void *payload = io_uring_recvmsg_payload(o, &conn.msgHdr);
             size_t payload_len = io_uring_recvmsg_payload_length(o, cqe->res, &conn.msgHdr);
 
-            uint8_t queryBuf[512];
+            uint8_t queryBuf[4096];
             size_t queryLen = std::min(payload_len, sizeof(queryBuf));
             memcpy(queryBuf, payload, queryLen);
 
@@ -262,11 +270,21 @@ void Core::worker(int th)
 
             switch (conn.type)
             {
+            case Gen::SYNC:
+            {
+                std::cout << "Sync data received: " << queryBuf << " - Bytes: " << res << std::endl;
+                thread.connections.erase(conn.fd);
+                close(conn.fd);
+                break;
+            }
+
             case Gen::TCP:
+            {
                 conn.len = handle(queryBuf, true, conn.ip, conn.ip_str, thread, conn.writeBuffer);
                 pipeline->queueWriteTcp(conn);
                 io_uring_submit(ring);
                 break;
+            }
 
             case Gen::UDP:
             {

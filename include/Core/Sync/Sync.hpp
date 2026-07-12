@@ -7,8 +7,10 @@
 
 #include "Utils/Socket.hpp"
 
+#include "Core/Gen/Gen.hpp"
+
 class Sync
 {
 public:
-    static int initSync(int port);
+    static void initSync(int port, Gen::Thread &thread);
 };

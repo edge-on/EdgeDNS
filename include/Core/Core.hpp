@@ -29,6 +29,7 @@
 #include "Core/Thread/Operational.hpp"
 #include "Core/Gen/Gen.hpp"
 #include "Core/Uring/Pipeline.hpp"
+#include "Core/Sync/Sync.hpp"
 
 #include "DNS/Proxy/Proxy.hpp"
 #include "Cassandra/Record.hpp"
