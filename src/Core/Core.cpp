@@ -10,7 +10,7 @@ Core::~Core()
 
 void Core::start()
 {
-    threadCount = 11;
+    threadCount = 12;
 
     start_clock_thread();
 
@@ -34,7 +34,7 @@ void Core::initUDP(Gen::Thread &thread)
 {
     thread.udpFd = socket(AF_INET, SOCK_DGRAM, 0);
 
-    makeNonBlocking(thread.udpFd);
+    Utils::Socket::makeNonBlocking(thread.udpFd);
 
     if (thread.udpFd == 0)
     {
@@ -68,7 +68,7 @@ void Core::initTCP(Gen::Thread &thread)
 {
     thread.tcpFd = socket(AF_INET, SOCK_STREAM, 0);
 
-    makeNonBlocking(thread.tcpFd);
+    Utils::Socket::makeNonBlocking(thread.tcpFd);
 
     if (thread.tcpFd == 0)
     {
@@ -84,14 +84,10 @@ void Core::initTCP(Gen::Thread &thread)
     eod_addr.sin_port = htons(PORT);
 
     if (bind(thread.tcpFd, (sockaddr *)&eod_addr, sizeof(eod_addr)) < 0)
-    {
         perror("eod tcp bind");
-    }
 
     if (listen(thread.tcpFd, SOMAXCONN) < 0)
-    {
         perror("eod tcp listen");
-    }
 
     Gen::Connection conn;
     conn.fd = thread.tcpFd;
@@ -361,7 +357,7 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
     uint16_t qclass = read16();
     size_t question_end = offset;
 
-    offset++; // NAME (root, tek byte)
+    offset++; // NAME
     uint16_t edns_type = read16();
     uint16_t edns_class = read16();
     read16(); // TTL hi
@@ -560,21 +556,8 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
         out[1] = rlen & 0xFF;
         memcpy(out + 2, out, rlen);
     }
-    else
-    {
-        memcpy(out, out, rlen);
-    }
 
     return rlen;
-}
-
-int Core::makeNonBlocking(int sfd)
-{
-    int flags = fcntl(sfd, F_GETFL, 0);
-    if (flags == -1)
-        return -1;
-    flags |= O_NONBLOCK;
-    return fcntl(sfd, F_SETFL, flags);
 }
 
 void Core::write32(std::vector<uint8_t> &buf, uint32_t value)

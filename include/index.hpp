@@ -11,6 +11,8 @@
 #include <iomanip>
 #include <vector>
 
+#include <filesystem>
+
 #include "Cache/MmapRecords.hpp"
 #include "Cache/MmapIpGroup.hpp"
 #include "Cache/MmapSystem.hpp"

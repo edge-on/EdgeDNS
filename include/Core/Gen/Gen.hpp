@@ -46,6 +46,8 @@ public:
         int udpFd;
         int tcpFd;
 
+        int syncFd;
+
         struct io_uring ring;
 
         std::unordered_map<int, Connection> connections;

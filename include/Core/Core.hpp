@@ -26,14 +26,14 @@
 
 #include <liburing/io_uring.h>
 
-#include "Global/Static.hpp"
+#include "Core/Thread/Operational.hpp"
+#include "Core/Gen/Gen.hpp"
+#include "Core/Uring/Pipeline.hpp"
+
 #include "DNS/Proxy/Proxy.hpp"
 #include "Cassandra/Record.hpp"
-#include "Core/Thread/Operational.hpp"
-
-#include "Core/Gen/Gen.hpp"
-
-#include "Core/Uring/Pipeline.hpp"
+#include "Global/Static.hpp"
+#include "Utils/Socket.hpp"
 
 inline thread_local std::vector<Records::DNSResponseData> t_matchedRecords;
 inline thread_local std::vector<IpGroupEntry::IpGroupEntryResponse> t_ipGroupEntries;
@@ -46,8 +46,6 @@ public:
 
     void write16(std::vector<uint8_t> &buf, uint16_t value);
     void write32(std::vector<uint8_t> &buf, uint32_t value);
-
-    int makeNonBlocking(int sfd);
 
     void start();
 

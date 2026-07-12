@@ -7,6 +7,12 @@ System::Mmap *Main::systemMap = nullptr;
 
 int main()
 {
+    if (std::filesystem::remove("local/dnsRecords.bin"))
+        std::cout << "Records Flushed Successfully!" << std::endl;
+
+    if (std::filesystem::remove("local/ipGroups.bin"))
+        std::cout << "Ip Group Entries Flushed Successfully!" << std::endl;
+
     Static::dns->init();
 
     Main::recordsMap = new Records::Mmap();
