@@ -13,10 +13,12 @@ public:
 
     void queueMultishotAccept(int fd);
     void queueRead(Gen::Connection &conn);
+    void queueReadForSync(Gen::Connection &conn);
     void queueWriteUdp(Gen::Context *ctx);
     void queueWriteTcp(Gen::Connection &conn);
 
     BufferPool *pool;
+
 private:
     struct io_uring_sqe *getSqe();
     Gen::Thread *thread;

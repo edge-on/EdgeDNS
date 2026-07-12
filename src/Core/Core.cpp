@@ -223,7 +223,11 @@ void Core::worker(int th)
 
             thread.connections[clientFd] = std::move(conn);
 
-            pipeline->queueRead(thread.connections[clientFd]);
+            if (conn.type == Gen::SYNC)
+                pipeline->queueReadForSync(thread.connections[clientFd]);
+            else
+                pipeline->queueRead(thread.connections[clientFd]);
+
             io_uring_submit(ring);
 
             continue;
@@ -272,9 +276,26 @@ void Core::worker(int th)
             {
             case Gen::SYNC:
             {
-                std::cout << "Sync data received: " << queryBuf << " - Bytes: " << res << std::endl;
-                thread.connections.erase(conn.fd);
-                close(conn.fd);
+                char bufType[32] = {0};
+                if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "type", bufType, sizeof(bufType)))
+                {
+                    std::cout << bufType << std::endl;
+                }
+                else
+                {
+                    const char *response = "HTTP/1.1 400 Bad Request\r\n"
+                                           "Content-Type: text/plain\r\n"
+                                           "Connection: close\r\n"
+                                           "Content-Length: 11\r\n"
+                                           "\r\n"
+                                           "Bad Request";
+
+                    conn.len = strlen(response);
+                    memcpy(conn.writeBuffer, response, conn.len);
+                }
+
+                pipeline->queueWriteTcp(conn);
+                io_uring_submit(ring);
                 break;
             }
 
@@ -325,6 +346,11 @@ void Core::worker(int th)
 
         case Gen::STATE_WRITE:
         {
+            if (conn.type == Gen::SYNC)
+            {
+                pipeline->queueReadForSync(conn);
+                io_uring_submit(ring);
+            }
             break;
         }
         }

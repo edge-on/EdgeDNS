@@ -40,6 +40,24 @@ void Pipeline::queueRead(Gen::Connection &conn)
     io_uring_sqe_set_data(sqe, (void *)data);
 }
 
+void Pipeline::queueReadForSync(Gen::Connection &conn)
+{
+    struct io_uring_sqe *sqe = getSqe();
+    if (!sqe)
+    {
+        return;
+    }
+
+    uint64_t data = ((uint64_t)Gen::STATE_READ << 32) | (uint32_t)conn.fd;
+
+    conn.buf_group = pool->pickGroup();
+
+    io_uring_prep_recvmsg(sqe, conn.fd, &conn.msgHdr, 0);
+    sqe->flags |= IOSQE_BUFFER_SELECT;
+    sqe->buf_group = (uint16_t)conn.buf_group;
+    io_uring_sqe_set_data(sqe, (void *)data);
+}
+
 void Pipeline::queueWriteUdp(Gen::Context *ctx)
 {
     struct io_uring_sqe *sqe = getSqe();
