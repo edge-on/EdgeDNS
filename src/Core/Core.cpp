@@ -277,21 +277,73 @@ void Core::worker(int th)
             case Gen::SYNC:
             {
                 char bufType[32] = {0};
+
+                // ==============================
+                // Types
+                // ==============================
+                // 0-1 - Record Add
+                // 0-2 - Reocrd Update
+                // 0-3 - Record Delete
+                // ==============================
+                // 1-1 - Ip Group Entry Add
+                // 1-2 - Ip Group Entry Updated
+                // 1-3 - Ip Group Entry Delete
+                // ==============================
+
+                int result;
+
+                const char *badRequest = "HTTP/1.1 400 Bad Request\r\n"
+                                         "Content-Type: text/plain\r\n"
+                                         "Connection: close\r\n"
+                                         "Content-Length: 11\r\n"
+                                         "\r\n"
+                                         "Bad Request";
+
                 if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "type", bufType, sizeof(bufType)))
                 {
-                    std::cout << bufType << std::endl;
+                    char op = bufType[2];
+
+                    // ==============================
+                    // 1 = Add              =========
+                    // 2 = Update           =========
+                    // 3 = Delete           =========
+                    // ==============================
+
+                    if (op != '1' && op != '2' && op != '3')
+                    {
+                        conn.len = strlen(badRequest);
+                        memcpy(conn.writeBuffer, badRequest, conn.len);
+                    }
+                    else if (bufType[0] == '0' && bufType[1] == '-') // Record Operations
+                    {
+                    }
+                    else if (bufType[0] == '1' && bufType[1] == '-') // Ip Group Entry Operations
+                    {
+                        char groupId[32] = {0};
+                        char locationCode[32] = {0};
+                        char id[32] = {0};
+
+                        if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "group_id", groupId, sizeof(groupId)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "location_code", locationCode, sizeof(locationCode)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "id", id, sizeof(id)))
+                        {
+                        }
+                        else
+                        {
+                            conn.len = strlen(badRequest);
+                            memcpy(conn.writeBuffer, badRequest, conn.len);
+                        }
+                    }
+                    else
+                    {
+                        conn.len = strlen(badRequest);
+                        memcpy(conn.writeBuffer, badRequest, conn.len);
+                    }
                 }
                 else
                 {
-                    const char *response = "HTTP/1.1 400 Bad Request\r\n"
-                                           "Content-Type: text/plain\r\n"
-                                           "Connection: close\r\n"
-                                           "Content-Length: 11\r\n"
-                                           "\r\n"
-                                           "Bad Request";
-
-                    conn.len = strlen(response);
-                    memcpy(conn.writeBuffer, response, conn.len);
+                    conn.len = strlen(badRequest);
+                    memcpy(conn.writeBuffer, badRequest, conn.len);
                 }
 
                 pipeline->queueWriteTcp(conn);
