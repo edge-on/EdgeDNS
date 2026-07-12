@@ -292,59 +292,121 @@ void Core::worker(int th)
 
                 int result;
 
-                const char *badRequest = "HTTP/1.1 400 Bad Request\r\n"
-                                         "Content-Type: text/plain\r\n"
-                                         "Connection: close\r\n"
-                                         "Content-Length: 11\r\n"
-                                         "\r\n"
-                                         "Bad Request";
+                char *response = "HTTP/1.1 400 Bad Request\r\n"
+                                 "Content-Type: text/plain\r\n"
+                                 "Connection: close\r\n"
+                                 "Content-Length: 11\r\n"
+                                 "\r\n"
+                                 "Bad Request";
 
                 if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "type", bufType, sizeof(bufType)))
                 {
                     char op = bufType[2];
 
                     // ==============================
+                    // Operations
+                    // ==============================
                     // 1 = Add              =========
                     // 2 = Update           =========
                     // 3 = Delete           =========
                     // ==============================
 
+                    // ==============================
+                    // Responses
+                    // ==============================
+                    // 0 = Success          =========
+                    // 1 = Not Found        =========
+                    // 2 = Error            =========
+                    // ==============================
+
                     if (op != '1' && op != '2' && op != '3')
                     {
-                        conn.len = strlen(badRequest);
-                        memcpy(conn.writeBuffer, badRequest, conn.len);
+                        // If there are an valid op, continue, if there are not stop and return bad request!
                     }
                     else if (bufType[0] == '0' && bufType[1] == '-') // Record Operations
                     {
+                        char zone[32] = {0};
+                        char type[32] = {0};
+                        char name[32] = {0};
+                        char idStr[32] = {0};
+
+                        if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "zone", zone, sizeof(zone)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "type", type, sizeof(type)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "name", name, sizeof(name)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "idStr", idStr, sizeof(idStr)))
+                        {
+                            CassUuid id;
+                            cass_uuid_from_string(idStr, &id);
+                        }
                     }
                     else if (bufType[0] == '1' && bufType[1] == '-') // Ip Group Entry Operations
                     {
-                        char groupId[32] = {0};
+                        char groupIdStr[36] = {0};
                         char locationCode[32] = {0};
-                        char id[32] = {0};
+                        char ip[12] = {0};
+                        char priority[32] = {0};
 
-                        if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "group_id", groupId, sizeof(groupId)) &&
+                        if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "group_id", groupIdStr, sizeof(groupIdStr)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "location_code", locationCode, sizeof(locationCode)) &&
-                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "id", id, sizeof(id)))
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "ip_address", ip, sizeof(ip)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "priority", priority, sizeof(priority)))
                         {
-                        }
-                        else
-                        {
-                            conn.len = strlen(badRequest);
-                            memcpy(conn.writeBuffer, badRequest, conn.len);
+                            CassUuid groupId;
+                            cass_uuid_from_string(groupIdStr, &groupId);
+
+                            std::vector<IpGroupEntry::IpGroupEntryResponse> out;
+                            Main::ipGroupMap->get_record(groupId, locationCode, out);
+
+                            if (out.size() == 0 && (op == '3'))
+                                response = "HTTP/1.1 200 OK\r\n"
+                                           "Content-Type: text/plain\r\n"
+                                           "Connection: close\r\n"
+                                           "Content-Length: 1\r\n"
+                                           "\r\n"
+                                           "1";
+                            else
+                                switch (op)
+                                {
+                                case '1': // Add
+                                {
+                                    Operational::addQueueForEntry(groupId, locationCode, {RData::generateRData(ip, 1), atoi(priority)});
+                                    response = "HTTP/1.1 200 OK\r\n"
+                                               "Content-Type: text/plain\r\n"
+                                               "Connection: close\r\n"
+                                               "Content-Length: 1\r\n"
+                                               "\r\n"
+                                               "0";
+                                    break;
+                                }
+
+                                case '2': // Update
+                                {
+                                    response = "HTTP/1.1 200 OK\r\n"
+                                               "Content-Type: text/plain\r\n"
+                                               "Connection: close\r\n"
+                                               "Content-Length: 1\r\n"
+                                               "\r\n"
+                                               "0";
+                                    break;
+                                }
+
+                                case '3': // Delete
+                                {
+                                    response = "HTTP/1.1 200 OK\r\n"
+                                               "Content-Type: text/plain\r\n"
+                                               "Connection: close\r\n"
+                                               "Content-Length: 1\r\n"
+                                               "\r\n"
+                                               "0";
+                                    break;
+                                }
+                                }
                         }
                     }
-                    else
-                    {
-                        conn.len = strlen(badRequest);
-                        memcpy(conn.writeBuffer, badRequest, conn.len);
-                    }
                 }
-                else
-                {
-                    conn.len = strlen(badRequest);
-                    memcpy(conn.writeBuffer, badRequest, conn.len);
-                }
+
+                conn.len = strlen(response);
+                memcpy(conn.writeBuffer, response, conn.len);
 
                 pipeline->queueWriteTcp(conn);
                 io_uring_submit(ring);
@@ -389,7 +451,11 @@ void Core::worker(int th)
 
             if (!hasMore)
             {
-                pipeline->queueRead(conn);
+                if (conn.type == Gen::SYNC)
+                    pipeline->queueReadForSync(conn);
+                else
+                    pipeline->queueRead(conn);
+
                 io_uring_submit(ring);
             }
 
