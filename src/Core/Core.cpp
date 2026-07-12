@@ -341,9 +341,9 @@ void Core::worker(int th)
                     }
                     else if (bufType[0] == '1' && bufType[1] == '-') // Ip Group Entry Operations
                     {
-                        char groupIdStr[36] = {0};
+                        char groupIdStr[40] = {0};
                         char locationCode[32] = {0};
-                        char ip[12] = {0};
+                        char ip[16] = {0};
                         char priority[32] = {0};
 
                         if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "group_id", groupIdStr, sizeof(groupIdStr)) &&
@@ -641,13 +641,53 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
 
                     for (auto &entry : t_ipGroupEntries)
                         Operational::addQueueForEntry(record.group_id, "AF", {entry.ip, entry.priority});
+                }
 
-                    record.rdata = t_ipGroupEntries[0].ip;
-                }
-                else
+                for (auto &entry : t_ipGroupEntries)
                 {
-                    record.rdata = t_ipGroupEntries[0].ip;
+                    record.rdata = entry.ip;
+
+                    uint16_t udp_limit = edns_class ? edns_class : 512;
+                    size_t rr_size =
+                        2 + // pointer
+                        2 + // type
+                        2 + // class
+                        4 + // ttl
+                        2 + // rdlen
+                        record.rdata.size();
+
+                    if (!is_tcp && rlen + rr_size > udp_limit)
+                        truncated = true;
+
+                    if (rlen + rr_size + 32 > sizeof(out))
+                        truncated = true;
+
+                    if (!truncated)
+                    {
+                        w16(0xC00C); // pointer
+                        w16(qtype);
+                        w16(1); // IN
+                        w32(record.ttl);
+
+                        if (qtype == 15) // MX
+                        {
+                            w16(static_cast<uint16_t>(2 + record.rdata.size()));
+                            w16(record.priority);
+                            memcpy(out + rlen, record.rdata.data(), record.rdata.size());
+                            rlen += record.rdata.size();
+                        }
+                        else
+                        {
+                            w16(static_cast<uint16_t>(record.rdata.size()));
+                            memcpy(out + rlen, record.rdata.data(), record.rdata.size());
+                            rlen += record.rdata.size();
+                        }
+
+                        anc++;
+                    }
                 }
+
+                continue;
             }
 
             uint16_t udp_limit = edns_class ? edns_class : 512;

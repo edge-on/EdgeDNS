@@ -49,6 +49,8 @@ bool IpGroupEntry::Mmap::init(const char *filepath)
             data_entries[i].priority = 0;
             data_entries[i].is_used = false;
 
+            data_entries[i].next_index = -1;
+
             std::memset(data_entries[i].country_code, 0, 11);
             std::memset(data_entries[i].ip.data(), 0, 4);
         }
