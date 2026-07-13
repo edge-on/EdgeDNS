@@ -381,6 +381,8 @@ void Core::worker(int th)
 
                                 case '2': // Update
                                 {
+                                    Main::ipGroupMap->delete_record(groupId, locationCode, atoi(priority));
+
                                     response = "HTTP/1.1 200 OK\r\n"
                                                "Content-Type: text/plain\r\n"
                                                "Connection: close\r\n"

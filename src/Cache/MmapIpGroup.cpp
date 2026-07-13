@@ -145,7 +145,7 @@ bool IpGroupEntry::Mmap::delete_record(const CassUuid group_id, char country_cod
         return false;
     }
 
-    if (data_entries[hash_table[bucket_idx].head_slot_idx].group_id.clock_seq_and_node != group_id.clock_seq_and_node &&
+    if (data_entries[hash_table[bucket_idx].head_slot_idx].group_id.clock_seq_and_node != group_id.clock_seq_and_node ||
         data_entries[hash_table[bucket_idx].head_slot_idx].group_id.time_and_version != group_id.time_and_version)
         return false;
 
