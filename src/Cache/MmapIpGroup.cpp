@@ -55,16 +55,14 @@ bool IpGroupEntry::Mmap::init(const char *filepath)
             std::memset(data_entries[i].ip.data(), 0, 4);
         }
     }
-    else
+
+    free_list_head_idx = -1;
+    for (int32_t i = static_cast<int32_t>(MAX_DATA_RECORDS) - 1; i >= 0; --i)
     {
-        free_list_head_idx = -1;
-        for (int32_t i = static_cast<int32_t>(MAX_DATA_RECORDS) - 1; i >= 0; --i)
+        if (!data_entries[i].is_used)
         {
-            if (!data_entries[i].is_used)
-            {
-                data_entries[i].next_index = free_list_head_idx;
-                free_list_head_idx = i;
-            }
+            data_entries[i].next_index = free_list_head_idx;
+            free_list_head_idx = i;
         }
     }
 
@@ -86,9 +84,7 @@ bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[8]
     while (current_slot >= 0 && current_slot < static_cast<int32_t>(MAX_DATA_RECORDS))
     {
         if (!data_entries[current_slot].is_used)
-        {
             break;
-        }
 
         IpGroupEntryResponse node;
         node.ip.assign(data_entries[current_slot].ip.begin(), data_entries[current_slot].ip.begin() + data_entries[current_slot].len);
