@@ -14,8 +14,8 @@
 
 namespace IpGroupEntry
 {
-    const size_t MAX_DATA_RECORDS = 50000;
-    const size_t HASH_TABLE_SIZE = 65536;
+    const size_t MAX_DATA_RECORDS = 67108864; // 67.108.864
+    const size_t HASH_TABLE_SIZE = 67108864; // 67.108.864
 
     struct __attribute__((packed)) IndexBucket
     {
@@ -24,6 +24,11 @@ namespace IpGroupEntry
         char country_code[8];   // 8 Byte
         int64_t head_slot_idx;  // 8 Byte
     }; // 32 Byte
+
+    struct __attribute__((packed)) PriorityEntry
+    {
+        uint64_t ipEntryIdx; // 16 Byte
+    }; // 16 Byte
 
     struct __attribute__((packed)) IpGroupEntry
     {

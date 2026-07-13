@@ -213,6 +213,8 @@ void IpGroupEntry::Mmap::push_free_slot(int32_t slotidx)
     free_list_head_idx = slotidx;
 }
 
+// In here there are an o(n) complexity for location code search 
+// We should make o(1) complexity
 size_t IpGroupEntry::Mmap::find_bucket(uint64_t hash, const char country_code[8], const CassUuid &group_id) const
 {
     size_t index = hash & (HASH_TABLE_SIZE - 1);

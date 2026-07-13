@@ -15,8 +15,8 @@
 
 namespace Records
 {
-    const size_t MAX_DATA_RECORDS = 50000;
-    const size_t HASH_TABLE_SIZE = 65536;
+    const size_t MAX_DATA_RECORDS = 67108864; // 67.108.864
+    const size_t HASH_TABLE_SIZE = 67108864;  // 67.108.864
 
     struct __attribute__((packed)) IndexBucket
     {
