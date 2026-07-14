@@ -9,8 +9,10 @@ Records::Mmap::~Mmap()
 bool Records::Mmap::init(const char *filepath)
 {
     size_t index_zone_size = HASH_TABLE_SIZE * sizeof(IndexBucket);
+    size_t id_zone_size = ID_HASH_TABLE_SIZE * sizeof(IDBucket);
     size_t data_zone_size = MAX_DATA_RECORDS * sizeof(DNSRecord);
-    total_file_size = index_zone_size + data_zone_size;
+
+    total_file_size = index_zone_size + id_zone_size + data_zone_size;
 
     bool is_new_file = (access(filepath, F_OK) == -1);
 
@@ -33,11 +35,13 @@ bool Records::Mmap::init(const char *filepath)
     mmap_base = static_cast<char *>(map);
 
     hash_table = reinterpret_cast<IndexBucket *>(mmap_base);
-    data_records = reinterpret_cast<DNSRecord *>(mmap_base + index_zone_size);
+    id_hash_table = reinterpret_cast<IDBucket *>(mmap_base + index_zone_size);
+    data_records = reinterpret_cast<DNSRecord *>(mmap_base + index_zone_size + id_zone_size);
 
     if (is_new_file)
     {
         std::memset(hash_table, 0, index_zone_size);
+        std::memset(id_hash_table, 0, id_zone_size);
 
         free_list_head_idx = 0;
         for (size_t i = 0; i < MAX_DATA_RECORDS; ++i)
@@ -50,16 +54,14 @@ bool Records::Mmap::init(const char *filepath)
             std::memset(data_records[i].payload.data(), 0, data_records[i].payload.size());
         }
     }
-    else
+
+    free_list_head_idx = -1;
+    for (int32_t i = static_cast<int32_t>(MAX_DATA_RECORDS) - 1; i >= 0; --i)
     {
-        free_list_head_idx = -1;
-        for (int32_t i = static_cast<int32_t>(MAX_DATA_RECORDS) - 1; i >= 0; --i)
+        if (!data_records[i].is_used)
         {
-            if (!data_records[i].is_used)
-            {
-                data_records[i].next_index = free_list_head_idx;
-                free_list_head_idx = i;
-            }
+            data_records[i].next_index = free_list_head_idx;
+            free_list_head_idx = i;
         }
     }
 
@@ -88,6 +90,7 @@ bool Records::Mmap::get_record(const uint8_t *wire_name, size_t wire_len, int32_
         node.priority = data_records[current_slot].priority;
         node.is_geo = data_records[current_slot].is_geo;
         node.group_id = data_records[current_slot].group_id;
+        node.id = data_records[current_slot].id;
 
         if (!node.is_geo)
         {
@@ -102,7 +105,14 @@ bool Records::Mmap::get_record(const uint8_t *wire_name, size_t wire_len, int32_
     return !out_records.empty();
 }
 
-bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, CassUuid group_id, bool is_geo, const std::vector<uint8_t> &binary_rdata)
+bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name,
+                                  int32_t qtype,
+                                  uint32_t ttl,
+                                  uint16_t priority,
+                                  CassUuid group_id,
+                                  CassUuid id,
+                                  bool is_geo,
+                                  const std::vector<uint8_t> &binary_rdata)
 {
     if (binary_rdata.size() > data_records[0].payload.size())
     {
@@ -120,9 +130,17 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name, int32_t
     if (new_slot_idx == -1)
         return false;
 
+    uint64_t id_hash = calculate_id_hash(id);
+
+    if (id_hash_table[id_hash].slot_idx != -1)
+        return false;
+
+    id_hash_table[id_hash].slot_idx = new_slot_idx;
+
     data_records[new_slot_idx].ttl = ttl;
     data_records[new_slot_idx].priority = priority;
     data_records[new_slot_idx].group_id = group_id;
+    data_records[new_slot_idx].id = id;
     data_records[new_slot_idx].is_geo = is_geo;
 
     if (!is_geo)
@@ -177,6 +195,27 @@ uint64_t Records::Mmap::calculate_hash(const uint8_t *wire_name, size_t len) con
     for (size_t i = 0; i < len; ++i)
     {
         uint8_t byte = wire_name[i];
+        if (byte >= 65 && byte <= 90)
+        {
+            byte += 32;
+        }
+        hash ^= static_cast<uint64_t>(byte);
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+uint64_t Records::Mmap::calculate_id_hash(CassUuid uuid) const
+{
+    uint8_t bytes[16];
+
+    std::memcpy(bytes, &uuid.time_and_version, 8);
+    std::memcpy(bytes + 8, &uuid.clock_seq_and_node, 8);
+
+    uint64_t hash = 14695981039346656037ULL;
+    for (int i = 0; i < 16; ++i)
+    {
+        uint8_t byte = bytes[i];
         if (byte >= 65 && byte <= 90)
         {
             byte += 32;

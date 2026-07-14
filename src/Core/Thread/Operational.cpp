@@ -13,6 +13,7 @@ void Operational::addQueueForRecord(const uint8_t *name, size_t nameLen, int qty
     record.prio = req.priority;
     record.val = req.rdata;
     record.groupId = req.group_id;
+    record.id = req.id;
     record.isGeo = req.is_geo;
 
     record.type = ADD;
@@ -50,7 +51,7 @@ void Operational::queueLifeCycle()
             recordQueue.pop_front();
 
             if (rec.type == QueueType::ADD)
-                Main::recordsMap->append_record(rec.name, rec.qtype, rec.ttl, rec.prio, rec.groupId, rec.isGeo, rec.val);
+                Main::recordsMap->append_record(rec.name, rec.qtype, rec.ttl, rec.prio, rec.groupId, rec.id, rec.isGeo, rec.val);
         }
 
         if (!entryQueue.empty())

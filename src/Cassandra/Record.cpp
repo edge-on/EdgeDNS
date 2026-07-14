@@ -31,6 +31,7 @@ std::vector<Records::DNSResponseData> DB::Record::getRecord(std::string zone, st
             const CassValue *prioVal = cass_row_get_column_by_name(row, "prio");
             const CassValue *dataVal = cass_row_get_column_by_name(row, "value");
             const CassValue *ipGroupVal = cass_row_get_column_by_name(row, "ip_group");
+            const CassValue *idVal = cass_row_get_column_by_name(row, "id");
             const CassValue *isGeoVal = cass_row_get_column_by_name(row, "is_geo");
 
             uint32_t ttl;
@@ -54,6 +55,7 @@ std::vector<Records::DNSResponseData> DB::Record::getRecord(std::string zone, st
             else
                 data.rdata = RData::generateRData(value, type);
 
+            cass_value_get_uuid(idVal, &data.id);
             data.is_geo = isGeo;
 
             res.emplace_back(data);
@@ -109,7 +111,7 @@ std::vector<IpGroupEntry::IpGroupEntryResponse> DB::Record::getIpGroupEntriesCou
 
             uint32_t priority;
             cass_value_get_uint32(prioVal, &priority);
-            
+
             data.ip = RData::generateRData(ip, 1);
             data.priority = priority;
 

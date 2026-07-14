@@ -29,6 +29,7 @@ public:
         int ttl;
         int prio;
         CassUuid groupId;
+        CassUuid id;
         bool isGeo;
         std::vector<uint8_t> val;
 
