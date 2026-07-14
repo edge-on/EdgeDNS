@@ -55,6 +55,7 @@ bool Records::Mmap::init(const char *filepath)
         }
     }
 
+    // Here just for a while (when we remove deleting file every time, this block will be work just if is_new_file is false)
     free_list_head_idx = -1;
     for (int32_t i = static_cast<int32_t>(MAX_DATA_RECORDS) - 1; i >= 0; --i)
     {
@@ -64,6 +65,13 @@ bool Records::Mmap::init(const char *filepath)
             free_list_head_idx = i;
         }
     }
+
+    for (uint32_t i = 0; i <= ID_HASH_TABLE_SIZE; ++i)
+    {
+        if (id_hash_table[i].slot_idx != -1)
+            id_hash_table[i].slot_idx = -1;
+    }
+    // ----------------------------------------------------------------------------------------------------------------------
 
     return true;
 }
@@ -130,8 +138,7 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name,
     if (new_slot_idx == -1)
         return false;
 
-    uint64_t id_hash = calculate_id_hash(id);
-
+    uint64_t id_hash = calculate_id_hash(id) % ID_HASH_TABLE_SIZE;
     if (id_hash_table[id_hash].slot_idx != -1)
         return false;
 
