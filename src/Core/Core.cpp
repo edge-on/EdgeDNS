@@ -396,18 +396,21 @@ void Core::worker(int th)
                                                "0";
                                     break;
                                 }
+                                }
+                        }
+                        else if (op == 3 && Utils::String::getParamFromCharBuffer((char *)queryBuf, "db_id", idStr, sizeof(idStr)))
+                        {
+                            CassUuid id;
+                            cass_uuid_from_string(idStr, &id);
 
-                                case '3': // Delete
-                                {
-                                    response = "HTTP/1.1 200 OK\r\n"
-                                               "Content-Type: text/plain\r\n"
-                                               "Connection: close\r\n"
-                                               "Content-Length: 1\r\n"
-                                               "\r\n"
-                                               "0";
-                                    break;
-                                }
-                                }
+                            Main::ipGroupMap->delete_record_from_id(groupId, locationCode, atoi(priority));
+
+                            response = "HTTP/1.1 200 OK\r\n"
+                                       "Content-Type: text/plain\r\n"
+                                       "Connection: close\r\n"
+                                       "Content-Length: 1\r\n"
+                                       "\r\n"
+                                       "0";
                         }
                     }
                 }

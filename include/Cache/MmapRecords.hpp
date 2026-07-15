@@ -36,8 +36,9 @@ namespace Records
         uint8_t rdata_len;                // 1 Byte
         CassUuid group_id;                // 16 Byte
         CassUuid id;                      // 16 Byte
-        std::array<uint8_t, 251> payload; // 252 Byte
-    }; // 296 Byte
+        uint64_t bucket_idx;              // 16 Byte
+        std::array<uint8_t, 251> payload; // 251 Byte
+    }; // 312 Byte
 
     struct __attribute__((packed)) IDBucket
     {
@@ -51,6 +52,7 @@ namespace Records
         std::vector<uint8_t> rdata;
         CassUuid group_id;
         CassUuid id;
+        uint64_t bucket_idx;
         bool is_geo;
     };
 
@@ -80,6 +82,7 @@ namespace Records
 
         bool append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, CassUuid groupId, CassUuid id, bool isGeo, const std::vector<uint8_t> &binary_rdata);
         bool delete_record(const std::vector<uint8_t> &wire_name, int32_t qtype);
+        bool delete_record_from_uuid(CassUuid id);
 
         ~Mmap();
     };

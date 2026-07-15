@@ -99,6 +99,7 @@ bool Records::Mmap::get_record(const uint8_t *wire_name, size_t wire_len, int32_
         node.is_geo = data_records[current_slot].is_geo;
         node.group_id = data_records[current_slot].group_id;
         node.id = data_records[current_slot].id;
+        node.bucket_idx = data_records[current_slot].bucket_idx;
 
         if (!node.is_geo)
         {
@@ -149,6 +150,7 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name,
     data_records[new_slot_idx].group_id = group_id;
     data_records[new_slot_idx].id = id;
     data_records[new_slot_idx].is_geo = is_geo;
+    data_records[new_slot_idx].bucket_idx = bucket_idx;
 
     if (!is_geo)
     {
@@ -194,6 +196,37 @@ bool Records::Mmap::delete_record(const std::vector<uint8_t> &wire_name, int32_t
     hash_table[bucket_idx].head_slot_idx = -1;
 
     return true;
+}
+
+bool Records::Mmap::delete_record_from_uuid(CassUuid id)
+{
+    uint64_t id_hash = calculate_id_hash(id) % ID_HASH_TABLE_SIZE;
+
+    uint64_t slot_idx = id_hash_table[id_hash].slot_idx;
+    uint64_t bucket_idx = data_records[slot_idx].bucket_idx;
+
+    bool is_only = false;
+
+    // If there are an next idx and this is the first block
+    if (slot_idx == hash_table[bucket_idx].head_slot_idx &&
+        data_records[slot_idx].next_index != -1)
+    {
+        hash_table[bucket_idx].head_slot_idx = data_records[slot_idx].next_index;
+    }
+    else
+    {
+        // this is only block in the bucket, we can remove hash safely
+        is_only = true;
+    }
+
+    push_free_slot(slot_idx);
+
+    if (is_only)
+    {
+        hash_table[bucket_idx].name_hash = 0;
+        hash_table[bucket_idx].qtype = 0;
+        hash_table[bucket_idx].head_slot_idx = -1;
+    }
 }
 
 uint64_t Records::Mmap::calculate_hash(const uint8_t *wire_name, size_t len) const
@@ -248,6 +281,8 @@ int32_t Records::Mmap::pop_free_slot()
 
 void Records::Mmap::push_free_slot(int32_t slotidx)
 {
+    id_hash_table[calculate_id_hash(data_records[slotidx].id) % ID_HASH_TABLE_SIZE].slot_idx = -1;
+
     data_records[slotidx].is_used = false;
     std::memset(data_records[slotidx].payload.data(), 0, data_records[slotidx].payload.size());
     data_records[slotidx].ttl = 0;

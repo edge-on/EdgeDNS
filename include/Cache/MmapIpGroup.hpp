@@ -26,11 +26,6 @@ namespace IpGroupEntry
         int64_t head_slot_idx;  // 8 Byte
     }; // 32 Byte
 
-    struct __attribute__((packed)) PriorityEntry
-    {
-        uint64_t ipEntryIdx; // 16 Byte
-    }; // 16 Byte
-
     struct __attribute__((packed)) IpGroupEntry
     {
         CassUuid group_id;          // 16 Byte
