@@ -28,21 +28,21 @@ namespace Records
 
     struct __attribute__((packed)) DNSRecord
     {
-        bool is_used;                     // 1 byte
-        int32_t next_index;               // 4 byte
-        uint32_t ttl;                     // 4 byte
-        uint16_t priority;                // 2 byte
-        bool is_geo;                      // 1 byte
-        uint8_t rdata_len;                // 1 byte
-        CassUuid group_id;                // 16 byte
-        CassUuid id;                      // 16 byte
-        std::array<uint8_t, 251> payload; // 252 byte
+        bool is_used;                     // 1 Byte
+        int32_t next_index;               // 4 Byte
+        uint32_t ttl;                     // 4 Byte
+        uint16_t priority;                // 2 Byte
+        bool is_geo;                      // 1 Byte
+        uint8_t rdata_len;                // 1 Byte
+        CassUuid group_id;                // 16 Byte
+        CassUuid id;                      // 16 Byte
+        std::array<uint8_t, 251> payload; // 252 Byte
     }; // 296 Byte
 
     struct __attribute__((packed)) IDBucket
     {
         uint64_t slot_idx = -1;
-    }; // 16 byte
+    }; // 16 Byte
 
     struct DNSResponseData
     {

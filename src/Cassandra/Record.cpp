@@ -102,8 +102,12 @@ std::vector<IpGroupEntry::IpGroupEntryResponse> DB::Record::getIpGroupEntriesCou
 
             const CassRow *row = cass_iterator_get_row(iterator);
 
+            const CassValue *idVal = cass_row_get_column_by_name(row, "id");
             const CassValue *ipVal = cass_row_get_column_by_name(row, "ip");
             const CassValue *prioVal = cass_row_get_column_by_name(row, "priority");
+
+            CassUuid id;
+            cass_value_get_uuid(idVal, &id);
 
             const char *ip;
             size_t len;
@@ -112,6 +116,7 @@ std::vector<IpGroupEntry::IpGroupEntryResponse> DB::Record::getIpGroupEntriesCou
             uint32_t priority;
             cass_value_get_uint32(prioVal, &priority);
 
+            data.id = id;
             data.ip = RData::generateRData(ip, 1);
             data.priority = priority;
 

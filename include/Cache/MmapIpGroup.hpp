@@ -15,7 +15,8 @@
 namespace IpGroupEntry
 {
     const size_t MAX_DATA_RECORDS = 100000; // 67.108.864
-    const size_t HASH_TABLE_SIZE = 100000; // 67.108.864
+    const size_t HASH_TABLE_SIZE = 100000;  // 67.108.864
+    const size_t ID_HASH_TABLE_SIZE = 100000;
 
     struct __attribute__((packed)) IndexBucket
     {
@@ -33,16 +34,23 @@ namespace IpGroupEntry
     struct __attribute__((packed)) IpGroupEntry
     {
         CassUuid group_id;          // 16 Byte
+        CassUuid id;                // 16 Byte
         char country_code[11];      // 11 Byte
         std::array<uint8_t, 16> ip; // 16 Byte
         int len;                    // 4 Byte
         int priority;               // 4 Byte
         bool is_used;               // 1 Byte
         int32_t next_index = -1;    // 4 byte
-    }; // 56 Byte
+    }; // 72 Byte
+
+    struct __attribute__((packed)) IDBucket
+    {
+        uint64_t slot_idx; // 16 Byte
+    }; // 16 Byte
 
     struct IpGroupEntryResponse
     {
+        CassUuid id;
         std::vector<uint8_t> ip;
         int priority;
     };
@@ -52,6 +60,7 @@ namespace IpGroupEntry
     private:
         char *mmap_base = nullptr;
         IndexBucket *hash_table = nullptr;
+        IDBucket *id_hash_table = nullptr;
         IpGroupEntry *data_entries = nullptr;
 
         size_t total_file_size = 0;
@@ -66,7 +75,7 @@ namespace IpGroupEntry
         bool init(const char *filepath);
 
         bool get_record(const CassUuid group_id, char country_code[8], std::vector<IpGroupEntryResponse> &out_entries);
-        bool append_record(CassUuid groupId, char countryCode[8], std::vector<uint8_t> val, int priority);
+        bool append_record(CassUuid groupId, CassUuid id, char countryCode[8], std::vector<uint8_t> val, int priority);
         bool delete_record(const CassUuid group_id, char country_code[8], int priority);
 
         ~Mmap();

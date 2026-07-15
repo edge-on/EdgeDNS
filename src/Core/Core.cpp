@@ -342,15 +342,20 @@ void Core::worker(int th)
                     else if (bufType[0] == '1' && bufType[1] == '-') // Ip Group Entry Operations
                     {
                         char groupIdStr[40] = {0};
+                        char idStr[40] = {0};
                         char locationCode[32] = {0};
                         char ip[16] = {0};
                         char priority[32] = {0};
 
                         if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "group_id", groupIdStr, sizeof(groupIdStr)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "db_id", idStr, sizeof(idStr)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "location_code", locationCode, sizeof(locationCode)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "ip_address", ip, sizeof(ip)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "priority", priority, sizeof(priority)))
                         {
+                            CassUuid id;
+                            cass_uuid_from_string(idStr, &id);
+
                             CassUuid groupId;
                             cass_uuid_from_string(groupIdStr, &groupId);
 
@@ -369,7 +374,7 @@ void Core::worker(int th)
                                 {
                                 case '1': // Add
                                 {
-                                    Operational::addQueueForEntry(groupId, locationCode, {RData::generateRData(ip, 1), atoi(priority)});
+                                    Operational::addQueueForEntry(groupId, locationCode, {id, RData::generateRData(ip, 1), atoi(priority)});
                                     response = "HTTP/1.1 200 OK\r\n"
                                                "Content-Type: text/plain\r\n"
                                                "Connection: close\r\n"
@@ -642,7 +647,7 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
                     t_ipGroupEntries = DB::Record::getIpGroupEntriesCountryBased(record.group_id, "AF");
 
                     for (auto &entry : t_ipGroupEntries)
-                        Operational::addQueueForEntry(record.group_id, "AF", {entry.ip, entry.priority});
+                        Operational::addQueueForEntry(record.group_id, "AF", {entry.id, entry.ip, entry.priority});
                 }
 
                 for (auto &entry : t_ipGroupEntries)

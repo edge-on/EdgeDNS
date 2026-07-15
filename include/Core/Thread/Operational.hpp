@@ -40,6 +40,7 @@ public:
     typedef struct
     {
         CassUuid groupId;
+        CassUuid id;
         char countryCode[8];
         std::vector<uint8_t> val;
         int priority;

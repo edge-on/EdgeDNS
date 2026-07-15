@@ -27,6 +27,7 @@ void Operational::addQueueForEntry(CassUuid groupId, char countryCode[8], IpGrou
     entry.val = req.ip;
     entry.priority = req.priority;
     entry.groupId = groupId;
+    entry.id = req.id;
     memcpy(entry.countryCode, countryCode, 8);
 
     entry.type = ADD;
@@ -61,7 +62,7 @@ void Operational::queueLifeCycle()
             entryQueue.pop_front();
 
             if (entry.type == QueueType::ADD)
-                Main::ipGroupMap->append_record(entry.groupId, entry.countryCode, entry.val, entry.priority);
+                Main::ipGroupMap->append_record(entry.groupId, entry.id, entry.countryCode, entry.val, entry.priority);
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));

@@ -9,8 +9,10 @@ IpGroupEntry::Mmap::~Mmap()
 bool IpGroupEntry::Mmap::init(const char *filepath)
 {
     size_t index_zone_size = HASH_TABLE_SIZE * sizeof(IndexBucket);
+    size_t id_zone_size = ID_HASH_TABLE_SIZE * sizeof(IDBucket);
     size_t data_zone_size = MAX_DATA_RECORDS * sizeof(IpGroupEntry);
-    total_file_size = index_zone_size + data_zone_size;
+
+    total_file_size = index_zone_size + id_zone_size + data_zone_size;
 
     bool is_new_file = (access(filepath, F_OK) == -1);
 
@@ -33,7 +35,8 @@ bool IpGroupEntry::Mmap::init(const char *filepath)
     mmap_base = static_cast<char *>(map);
 
     hash_table = reinterpret_cast<IndexBucket *>(mmap_base);
-    data_entries = reinterpret_cast<IpGroupEntry *>(mmap_base + index_zone_size);
+    id_hash_table = reinterpret_cast<IDBucket *>(mmap_base + index_zone_size);
+    data_entries = reinterpret_cast<IpGroupEntry *>(mmap_base + index_zone_size + id_zone_size);
 
     if (is_new_file)
     {
@@ -42,6 +45,10 @@ bool IpGroupEntry::Mmap::init(const char *filepath)
         free_list_head_idx = 0;
         for (size_t i = 0; i < MAX_DATA_RECORDS; ++i)
         {
+            // ID
+            data_entries[i].id.clock_seq_and_node = 0;
+            data_entries[i].id.time_and_version = 0;
+
             // GROUP ID
             data_entries[i].group_id.clock_seq_and_node = 0;
             data_entries[i].group_id.time_and_version = 0;
@@ -56,6 +63,7 @@ bool IpGroupEntry::Mmap::init(const char *filepath)
         }
     }
 
+    // Here just for a while (when we remove deleting file every time, this block will be work just if is_new_file is false)
     free_list_head_idx = -1;
     for (int32_t i = static_cast<int32_t>(MAX_DATA_RECORDS) - 1; i >= 0; --i)
     {
@@ -65,6 +73,13 @@ bool IpGroupEntry::Mmap::init(const char *filepath)
             free_list_head_idx = i;
         }
     }
+
+    for (uint32_t i = 0; i <= ID_HASH_TABLE_SIZE; ++i)
+    {
+        if (id_hash_table[i].slot_idx != -1)
+            id_hash_table[i].slot_idx = -1;
+    }
+    // ----------------------------------------------------------------------------------------------------------------------
 
     return true;
 }
@@ -100,7 +115,7 @@ bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[8]
     return !out_entries.empty();
 }
 
-bool IpGroupEntry::Mmap::append_record(CassUuid groupId, char countryCode[8], std::vector<uint8_t> val, int priority)
+bool IpGroupEntry::Mmap::append_record(CassUuid groupId, CassUuid id, char countryCode[8], std::vector<uint8_t> val, int priority)
 {
     uint64_t hash = calculate_hash_from_uuid(groupId);
     size_t bucket_idx = find_bucket(hash, countryCode, groupId);
@@ -112,12 +127,17 @@ bool IpGroupEntry::Mmap::append_record(CassUuid groupId, char countryCode[8], st
     if (new_slot_idx == -1)
         return false;
 
+    uint64_t idHash = calculate_hash_from_uuid(id) & ID_HASH_TABLE_SIZE;
+    if (id_hash_table[idHash].slot_idx != -1)
+        return false;
+
+    id_hash_table[idHash].slot_idx = new_slot_idx;
+
     data_entries[new_slot_idx].group_id = groupId;
     memcpy(data_entries[new_slot_idx].ip.data(), val.data(), val.size());
     data_entries[new_slot_idx].len = val.size();
     data_entries[new_slot_idx].priority = priority;
     memcpy(data_entries[new_slot_idx].country_code, countryCode, 11);
-
     data_entries[new_slot_idx].is_used = true;
 
     if (hash_table[bucket_idx].group_id_hash == 0)
@@ -213,7 +233,7 @@ void IpGroupEntry::Mmap::push_free_slot(int32_t slotidx)
     free_list_head_idx = slotidx;
 }
 
-// In here there are an o(n) complexity for location code search 
+// In here there are an o(n) complexity for location code search
 // We should make o(1) complexity
 size_t IpGroupEntry::Mmap::find_bucket(uint64_t hash, const char country_code[8], const CassUuid &group_id) const
 {
