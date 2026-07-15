@@ -104,6 +104,7 @@ bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[8]
         IpGroupEntryResponse node;
         node.ip.assign(data_entries[current_slot].ip.begin(), data_entries[current_slot].ip.begin() + data_entries[current_slot].len);
         node.priority = data_entries[current_slot].priority;
+        node.id = data_entries[current_slot].id;
 
         out_entries.push_back(node);
 
@@ -134,6 +135,7 @@ bool IpGroupEntry::Mmap::append_record(CassUuid groupId, CassUuid id, char count
     id_hash_table[idHash].slot_idx = new_slot_idx;
 
     data_entries[new_slot_idx].group_id = groupId;
+    data_entries[new_slot_idx].id = id;
     memcpy(data_entries[new_slot_idx].ip.data(), val.data(), val.size());
     data_entries[new_slot_idx].len = val.size();
     data_entries[new_slot_idx].priority = priority;
@@ -182,6 +184,23 @@ bool IpGroupEntry::Mmap::delete_record(const CassUuid group_id, char country_cod
     hash_table[bucket_idx].head_slot_idx = -1;
 
     return true;
+}
+
+bool IpGroupEntry::Mmap::delete_record_from_uuid(CassUuid group_id, CassUuid id)
+{
+    uint64_t hash = calculate_hash_from_uuid(id);
+    // uint64_t bucket_idx = find_bucket(hash)
+    uint64_t id_hash = calculate_hash_from_uuid(id);
+    if (id_hash_table[id_hash].slot_idx == -1)
+        return false;
+
+    uint64_t slot_idx = id_hash_table[id_hash].slot_idx;
+
+    if (slot_idx == data_entries[slot_idx].slo data_entries[slot_idx].next_index != -1)
+    {
+    }
+
+    push_free_slot(slot_idx);
 }
 
 uint64_t IpGroupEntry::Mmap::calculate_hash_from_uuid(const CassUuid &uuid) const

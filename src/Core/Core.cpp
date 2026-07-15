@@ -403,7 +403,7 @@ void Core::worker(int th)
                             CassUuid id;
                             cass_uuid_from_string(idStr, &id);
 
-                            Main::ipGroupMap->delete_record_from_id(groupId, locationCode, atoi(priority));
+                            Main::ipGroupMap->delete_record_from_uuid(id);
 
                             response = "HTTP/1.1 200 OK\r\n"
                                        "Content-Type: text/plain\r\n"
