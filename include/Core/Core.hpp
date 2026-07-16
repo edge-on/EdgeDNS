@@ -23,6 +23,7 @@
 #include <set>
 
 #include <atomic>
+#include <mutex>
 
 #include <liburing/io_uring.h>
 

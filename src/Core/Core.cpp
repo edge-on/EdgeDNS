@@ -398,12 +398,17 @@ void Core::worker(int th)
                                 }
                                 }
                         }
-                        else if (op == 3 && Utils::String::getParamFromCharBuffer((char *)queryBuf, "db_id", idStr, sizeof(idStr)))
+                        else if (op == 3 &&
+                                 Utils::String::getParamFromCharBuffer((char *)queryBuf, "group_id", groupIdStr, sizeof(groupIdStr)) &&
+                                 Utils::String::getParamFromCharBuffer((char *)queryBuf, "db_id", idStr, sizeof(idStr)))
                         {
                             CassUuid id;
                             cass_uuid_from_string(idStr, &id);
+                            
+                            CassUuid groupId;
+                            cass_uuid_from_string(groupIdStr, &groupId);
 
-                            Main::ipGroupMap->delete_record_from_uuid(id);
+                            Main::ipGroupMap->delete_record_from_uuid(groupId, id);
 
                             response = "HTTP/1.1 200 OK\r\n"
                                        "Content-Type: text/plain\r\n"

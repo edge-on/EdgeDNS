@@ -188,19 +188,32 @@ bool IpGroupEntry::Mmap::delete_record(const CassUuid group_id, char country_cod
 
 bool IpGroupEntry::Mmap::delete_record_from_uuid(CassUuid group_id, CassUuid id)
 {
-    uint64_t hash = calculate_hash_from_uuid(id);
-    // uint64_t bucket_idx = find_bucket(hash)
     uint64_t id_hash = calculate_hash_from_uuid(id);
     if (id_hash_table[id_hash].slot_idx == -1)
         return false;
 
     uint64_t slot_idx = id_hash_table[id_hash].slot_idx;
 
-    if (slot_idx == data_entries[slot_idx].slo data_entries[slot_idx].next_index != -1)
+    uint64_t hash = calculate_hash_from_uuid(id);
+    uint64_t bucket_idx = find_bucket(hash, data_entries[slot_idx].country_code, group_id);
+
+    bool is_only;
+
+    if (slot_idx == hash_table[bucket_idx].head_slot_idx && data_entries[slot_idx].next_index != -1)
     {
+        hash_table[bucket_idx].head_slot_idx = data_entries[slot_idx].next_index;
+
+        is_only = false;
+    } else {
+        is_only = true;
     }
 
     push_free_slot(slot_idx);
+
+    if(is_only) {
+        hash_table[bucket_idx].group_id_hash = 0;
+        hash_table[bucket_idx].head_slot_idx = 0;
+    }
 }
 
 uint64_t IpGroupEntry::Mmap::calculate_hash_from_uuid(const CassUuid &uuid) const
