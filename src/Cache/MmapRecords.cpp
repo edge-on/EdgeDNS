@@ -205,6 +205,8 @@ bool Records::Mmap::delete_record_from_uuid(CassUuid id)
 
     uint64_t slot_idx = id_hash_table[id_hash].slot_idx;
     uint64_t bucket_idx = data_records[slot_idx].bucket_idx;
+    if (bucket_idx == -1)
+        return false;
 
     bool is_only = false;
 

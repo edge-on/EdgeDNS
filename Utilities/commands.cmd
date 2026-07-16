@@ -1,3 +1,10 @@
+## Fetch Changes From Github
+git status
+git fetch origin
+git status
+git pull origin master
+
+## Linux Optimizations
 ulimit -n 1048576 && \
 sysctl -w net.core.somaxconn=65535 \
 net.core.netdev_max_backlog=250000 \

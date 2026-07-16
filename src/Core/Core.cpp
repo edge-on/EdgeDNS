@@ -327,24 +327,168 @@ void Core::worker(int th)
                     {
                         char zone[32] = {0};
                         char type[32] = {0};
+                        char ttl[32] = {0};
+                        char prio[32] = {0};
                         char name[32] = {0};
-                        char idStr[32] = {0};
+                        char idStr[40] = {0};
+                        char groupIdStr[40] = {0};
+                        char value[4096] = {0};
+                        char isGeoStr[1] = {0};
 
                         if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "zone", zone, sizeof(zone)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "type", type, sizeof(type)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "ttl", ttl, sizeof(ttl)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "prio", prio, sizeof(prio)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "name", name, sizeof(name)) &&
-                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "idStr", idStr, sizeof(idStr)))
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "db_id", idStr, sizeof(idStr)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "group_id", groupIdStr, sizeof(groupIdStr)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "is_geo", isGeoStr, sizeof(isGeoStr)))
                         {
+                            CassUuid groupId;
+                            cass_uuid_from_string(groupIdStr, &groupId);
+
                             CassUuid id;
                             cass_uuid_from_string(idStr, &id);
+
+                            switch (op)
+                            {
+                            case 1: // Add
+                            {
+                                auto nameWire = Utils::Vector::stringToWire(name, 0);
+                                if (isGeoStr[0] == '1')
+                                {
+                                    Operational::addQueueForRecord(
+                                        nameWire.data(),
+                                        nameWire.size(),
+                                        atoi(type),
+                                        {// TTL
+                                         (uint32_t)atoi(ttl),
+                                         // Prio
+                                         (uint16_t)atoi(prio),
+                                         // Value
+                                         std::vector<uint8_t>(),
+                                         // Group ID
+                                         groupId,
+                                         // ID
+                                         id,
+                                         // Bucket idx (unnecessary)
+                                         0,
+                                         // isGeo
+                                         true});
+
+                                    response = "HTTP/1.1 200 OK\r\n"
+                                               "Content-Type: text/plain\r\n"
+                                               "Connection: close\r\n"
+                                               "Content-Length: 1\r\n"
+                                               "\r\n"
+                                               "0";
+                                }
+                                else
+                                {
+                                    if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "value", value, sizeof(value)))
+                                    {
+                                        Operational::addQueueForRecord(
+                                            nameWire.data(),
+                                            nameWire.size(),
+                                            atoi(type),
+                                            {// TTL
+                                             (uint32_t)atoi(ttl),
+                                             // Prio
+                                             (uint16_t)atoi(prio),
+                                             // Value
+                                             RData::generateRData(value, atoi(type)),
+                                             // Group ID
+                                             groupId,
+                                             // ID
+                                             id,
+                                             // Bucket idx (unnecessary)
+                                             0,
+                                             // isGeo
+                                             false});
+
+                                        response = "HTTP/1.1 200 OK\r\n"
+                                                   "Content-Type: text/plain\r\n"
+                                                   "Connection: close\r\n"
+                                                   "Content-Length: 1\r\n"
+                                                   "\r\n"
+                                                   "0";
+                                    }
+                                    else
+                                    {
+                                        response = "HTTP/1.1 200 OK\r\n"
+                                                   "Content-Type: text/plain\r\n"
+                                                   "Connection: close\r\n"
+                                                   "Content-Length: 1\r\n"
+                                                   "\r\n"
+                                                   "1";
+                                    }
+                                }
+
+                                break;
+                            }
+
+                            case 2: // Update
+                                Main::recordsMap->delete_record_from_uuid(id);
+                                auto nameWire = Utils::Vector::stringToWire(name, 0);
+                                if (isGeoStr[0] == '1')
+                                {
+                                    Operational::addQueueForRecord(
+                                        nameWire.data(),
+                                        nameWire.size(),
+                                        atoi(type),
+                                        {// TTL
+                                         (uint32_t)atoi(ttl),
+                                         // Prio
+                                         (uint16_t)atoi(prio),
+                                         // Value
+                                         std::vector<uint8_t>(),
+                                         // Group ID
+                                         groupId,
+                                         // ID
+                                         id,
+                                         // Bucket idx (unnecessary)
+                                         0,
+                                         // isGeo
+                                         true});
+                                }
+                                else
+                                {
+                                    Operational::addQueueForRecord(
+                                        nameWire.data(),
+                                        nameWire.size(),
+                                        atoi(type),
+                                        {// TTL
+                                         (uint32_t)atoi(ttl),
+                                         // Prio
+                                         (uint16_t)atoi(prio),
+                                         // Value
+                                         RData::generateRData(value, atoi(type)),
+                                         // Group ID
+                                         groupId,
+                                         // ID
+                                         id,
+                                         // Bucket idx (unnecessary)
+                                         0,
+                                         // isGeo
+                                         false});
+                                }
+
+                                response = "HTTP/1.1 200 OK\r\n"
+                                           "Content-Type: text/plain\r\n"
+                                           "Connection: close\r\n"
+                                           "Content-Length: 1\r\n"
+                                           "\r\n"
+                                           "0";
+                                break;
+                            }
                         }
-                        else if (op == 3 && Utils::String::getParamFromCharBuffer((char *)queryBuf, "idStr", idStr, sizeof(idStr)))
+                        else if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "db_id", idStr, sizeof(idStr)) && op == '3')
                         {
+                            std::cout << idStr << std::endl;
                             CassUuid id;
                             cass_uuid_from_string(idStr, &id);
 
                             Main::recordsMap->delete_record_from_uuid(id);
-
                             response = "HTTP/1.1 200 OK\r\n"
                                        "Content-Type: text/plain\r\n"
                                        "Connection: close\r\n"
@@ -400,8 +544,8 @@ void Core::worker(int th)
 
                                 case '2': // Update
                                 {
-                                    Main::ipGroupMap->delete_record(groupId, locationCode, atoi(priority));
-
+                                    Main::ipGroupMap->delete_record_from_uuid(groupId, id);
+                                    Operational::addQueueForEntry(groupId, locationCode, {id, RData::generateRData(ip, 1), atoi(priority)});
                                     response = "HTTP/1.1 200 OK\r\n"
                                                "Content-Type: text/plain\r\n"
                                                "Connection: close\r\n"
