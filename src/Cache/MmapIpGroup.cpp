@@ -64,6 +64,12 @@ bool IpGroupEntry::Mmap::init(const char *filepath)
     }
 
     // Here just for a while (when we remove deleting file every time, this block will be work just if is_new_file is false)
+    for (int32_t i = 0; i <= ID_HASH_TABLE_SIZE; ++i)
+    {
+        if (id_hash_table[i].slot_idx != -1)
+            id_hash_table[i].slot_idx = -1;
+    }
+
     free_list_head_idx = -1;
     for (int32_t i = static_cast<int32_t>(MAX_DATA_RECORDS) - 1; i >= 0; --i)
     {
@@ -72,12 +78,6 @@ bool IpGroupEntry::Mmap::init(const char *filepath)
             data_entries[i].next_index = free_list_head_idx;
             free_list_head_idx = i;
         }
-    }
-
-    for (uint32_t i = 0; i <= ID_HASH_TABLE_SIZE; ++i)
-    {
-        if (id_hash_table[i].slot_idx != -1)
-            id_hash_table[i].slot_idx = -1;
     }
     // ----------------------------------------------------------------------------------------------------------------------
 
@@ -204,13 +204,16 @@ bool IpGroupEntry::Mmap::delete_record_from_uuid(CassUuid group_id, CassUuid id)
         hash_table[bucket_idx].head_slot_idx = data_entries[slot_idx].next_index;
 
         is_only = false;
-    } else {
+    }
+    else
+    {
         is_only = true;
     }
 
     push_free_slot(slot_idx);
 
-    if(is_only) {
+    if (is_only)
+    {
         hash_table[bucket_idx].group_id_hash = 0;
         hash_table[bucket_idx].head_slot_idx = 0;
     }
