@@ -338,6 +338,20 @@ void Core::worker(int th)
                             CassUuid id;
                             cass_uuid_from_string(idStr, &id);
                         }
+                        else if (op == 3 && Utils::String::getParamFromCharBuffer((char *)queryBuf, "idStr", idStr, sizeof(idStr)))
+                        {
+                            CassUuid id;
+                            cass_uuid_from_string(idStr, &id);
+
+                            Main::recordsMap->delete_record_from_uuid(id);
+
+                            response = "HTTP/1.1 200 OK\r\n"
+                                       "Content-Type: text/plain\r\n"
+                                       "Connection: close\r\n"
+                                       "Content-Length: 1\r\n"
+                                       "\r\n"
+                                       "0";
+                        }
                     }
                     else if (bufType[0] == '1' && bufType[1] == '-') // Ip Group Entry Operations
                     {
@@ -404,7 +418,7 @@ void Core::worker(int th)
                         {
                             CassUuid id;
                             cass_uuid_from_string(idStr, &id);
-                            
+
                             CassUuid groupId;
                             cass_uuid_from_string(groupIdStr, &groupId);
 
