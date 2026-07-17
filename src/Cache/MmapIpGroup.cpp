@@ -109,9 +109,6 @@ bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[7]
 
         out_entries.push_back(node);
 
-        if (data_entries[current_slot].next_index == -1)
-            break;
-
         current_slot = data_entries[current_slot].next_index;
     }
     return !out_entries.empty();
@@ -208,9 +205,16 @@ bool IpGroupEntry::Mmap::delete_record_from_uuid(CassUuid group_id, CassUuid id)
             hash_table[bucket_idx].head_slot_idx = data_entries[slot_idx].next_index;
 
         if (data_entries[slot_idx].prev_index != -1)
+        {
+            data_entries[data_entries[slot_idx].next_index].prev_index = data_entries[slot_idx].prev_index;
             data_entries[data_entries[slot_idx].prev_index].next_index = data_entries[slot_idx].next_index;
+        }
     }
-    else if (data_entries[slot_idx].prev_index == -1)
+    else if (data_entries[slot_idx].prev_index != -1)
+    {
+        data_entries[data_entries[slot_idx].prev_index].next_index = -1;
+    }
+    else
     {
         hash_table[bucket_idx].group_id_hash = 0;
         hash_table[bucket_idx].head_slot_idx = 0;

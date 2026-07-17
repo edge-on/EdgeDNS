@@ -218,7 +218,10 @@ bool Records::Mmap::delete_record_from_uuid(CassUuid id)
             hash_table[bucket_idx].head_slot_idx = data_records[slot_idx].next_index;
 
         if (data_records[slot_idx].prev_index != -1)
+        {
+            data_records[data_records[slot_idx].next_index].prev_index = data_records[slot_idx].prev_index;
             data_records[data_records[slot_idx].prev_index].next_index = data_records[slot_idx].next_index;
+        }
     }
     else if (data_records[slot_idx].prev_index == -1)
     {
