@@ -57,14 +57,15 @@ bool IpGroupEntry::Mmap::init(const char *filepath)
             data_entries[i].is_used = false;
 
             data_entries[i].next_index = -1;
+            data_entries[i].prev_index = -1;
 
-            std::memset(data_entries[i].country_code, 0, 11);
-            std::memset(data_entries[i].ip.data(), 0, 4);
+            std::memset(data_entries[i].country_code, 0, 7);
+            std::memset(data_entries[i].ip, 0, 12);
         }
     }
 
     // Here just for a while (when we remove deleting file every time, this block will be work just if is_new_file is false)
-    for (int32_t i = 0; i <= ID_HASH_TABLE_SIZE; ++i)
+    for (int32_t i = 0; i < ID_HASH_TABLE_SIZE; ++i)
     {
         if (id_hash_table[i].slot_idx != -1)
             id_hash_table[i].slot_idx = -1;
@@ -84,7 +85,7 @@ bool IpGroupEntry::Mmap::init(const char *filepath)
     return true;
 }
 
-bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[8], std::vector<IpGroupEntryResponse> &out_entries)
+bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[7], std::vector<IpGroupEntryResponse> &out_entries)
 {
     out_entries.clear();
     uint64_t hash = calculate_hash_from_uuid(group_id);
@@ -102,7 +103,7 @@ bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[8]
             break;
 
         IpGroupEntryResponse node;
-        node.ip.assign(data_entries[current_slot].ip.begin(), data_entries[current_slot].ip.begin() + data_entries[current_slot].len);
+        node.ip.assign(data_entries[current_slot].ip, data_entries[current_slot].ip + data_entries[current_slot].len);
         node.priority = data_entries[current_slot].priority;
         node.id = data_entries[current_slot].id;
 
@@ -116,7 +117,7 @@ bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[8]
     return !out_entries.empty();
 }
 
-bool IpGroupEntry::Mmap::append_record(CassUuid groupId, CassUuid id, char countryCode[8], std::vector<uint8_t> val, int priority)
+bool IpGroupEntry::Mmap::append_record(CassUuid groupId, CassUuid id, char countryCode[7], std::vector<uint8_t> val, int priority)
 {
     uint64_t hash = calculate_hash_from_uuid(groupId);
     size_t bucket_idx = find_bucket(hash, countryCode, groupId);
@@ -128,7 +129,7 @@ bool IpGroupEntry::Mmap::append_record(CassUuid groupId, CassUuid id, char count
     if (new_slot_idx == -1)
         return false;
 
-    uint64_t idHash = calculate_hash_from_uuid(id) % ID_HASH_TABLE_SIZE;
+    uint64_t idHash = calculate_hash_from_uuid(id) & (ID_HASH_TABLE_SIZE - 1);
     if (id_hash_table[idHash].slot_idx != -1)
         return false;
 
@@ -136,28 +137,30 @@ bool IpGroupEntry::Mmap::append_record(CassUuid groupId, CassUuid id, char count
 
     data_entries[new_slot_idx].group_id = groupId;
     data_entries[new_slot_idx].id = id;
-    memcpy(data_entries[new_slot_idx].ip.data(), val.data(), val.size());
+    memcpy(data_entries[new_slot_idx].ip, val.data(), val.size());
     data_entries[new_slot_idx].len = val.size();
     data_entries[new_slot_idx].priority = priority;
-    memcpy(data_entries[new_slot_idx].country_code, countryCode, 11);
+    memcpy(data_entries[new_slot_idx].country_code, countryCode, 7);
     data_entries[new_slot_idx].is_used = true;
 
     if (hash_table[bucket_idx].group_id_hash == 0)
     {
         hash_table[bucket_idx].group_id_hash = hash;
-        memcpy(hash_table[bucket_idx].country_code, data_entries[new_slot_idx].country_code, 11);
+        memcpy(hash_table[bucket_idx].country_code, data_entries[new_slot_idx].country_code, 7);
         hash_table[bucket_idx].head_slot_idx = new_slot_idx;
         data_entries[new_slot_idx].next_index = -1;
     }
     else
     {
+        data_entries[hash_table[bucket_idx].head_slot_idx].prev_index = new_slot_idx;
         data_entries[new_slot_idx].next_index = hash_table[bucket_idx].head_slot_idx;
+
         hash_table[bucket_idx].head_slot_idx = new_slot_idx;
     }
     return true;
 }
 
-bool IpGroupEntry::Mmap::delete_record(const CassUuid group_id, char country_code[8], int priority)
+bool IpGroupEntry::Mmap::delete_record(const CassUuid group_id, char country_code[7], int priority)
 {
     uint64_t hash = calculate_hash_from_uuid(group_id);
     size_t bucket_idx = find_bucket(hash, country_code, group_id);
@@ -180,7 +183,7 @@ bool IpGroupEntry::Mmap::delete_record(const CassUuid group_id, char country_cod
     }
 
     hash_table[bucket_idx].group_id_hash = 0;
-    memset(hash_table[bucket_idx].country_code, 0, 11);
+    memset(hash_table[bucket_idx].country_code, 0, 7);
     hash_table[bucket_idx].head_slot_idx = -1;
 
     return true;
@@ -188,7 +191,7 @@ bool IpGroupEntry::Mmap::delete_record(const CassUuid group_id, char country_cod
 
 bool IpGroupEntry::Mmap::delete_record_from_uuid(CassUuid group_id, CassUuid id)
 {
-    uint64_t id_hash = calculate_hash_from_uuid(id) % ID_HASH_TABLE_SIZE;
+    uint64_t id_hash = calculate_hash_from_uuid(id) & (ID_HASH_TABLE_SIZE - 1);
 
     if (id_hash_table[id_hash].slot_idx == -1)
         return false;
@@ -198,26 +201,23 @@ bool IpGroupEntry::Mmap::delete_record_from_uuid(CassUuid group_id, CassUuid id)
     uint64_t hash = calculate_hash_from_uuid(id);
     uint64_t bucket_idx = find_bucket(hash, data_entries[slot_idx].country_code, group_id);
 
-    bool is_only;
-
-    if (slot_idx == hash_table[bucket_idx].head_slot_idx && data_entries[slot_idx].next_index != -1)
+    if (slot_idx == hash_table[bucket_idx].head_slot_idx &&
+        data_entries[slot_idx].next_index != -1)
     {
-        hash_table[bucket_idx].head_slot_idx = data_entries[slot_idx].next_index;
+        if (data_entries[slot_idx].prev_index == -1)
+            hash_table[bucket_idx].head_slot_idx = data_entries[slot_idx].next_index;
 
-        is_only = false;
+        if (data_entries[slot_idx].prev_index != -1)
+            data_entries[data_entries[slot_idx].prev_index].next_index = data_entries[slot_idx].next_index;
     }
-    else
-    {
-        is_only = true;
-    }
-
-    push_free_slot(slot_idx);
-
-    if (is_only)
+    else if (data_entries[slot_idx].prev_index == -1)
     {
         hash_table[bucket_idx].group_id_hash = 0;
         hash_table[bucket_idx].head_slot_idx = 0;
     }
+
+    push_free_slot(slot_idx);
+    id_hash_table[id_hash].slot_idx = -1;
 
     return true;
 }
@@ -260,18 +260,19 @@ void IpGroupEntry::Mmap::push_free_slot(int32_t slotidx)
 {
     data_entries[slotidx].is_used = false;
 
-    std::memset(data_entries[slotidx].country_code, 0, 11);
-    std::memset(data_entries[slotidx].ip.data(), 0, 4);
+    std::memset(data_entries[slotidx].country_code, 0, 7);
+    std::memset(data_entries[slotidx].ip, 0, 12);
 
     data_entries[slotidx].group_id.clock_seq_and_node = 0;
     data_entries[slotidx].group_id.time_and_version = 0;
 
     data_entries[slotidx].priority = 0;
     data_entries[slotidx].next_index = free_list_head_idx;
+    data_entries[slotidx].prev_index = -1;
     free_list_head_idx = slotidx;
 }
 
-size_t IpGroupEntry::Mmap::find_bucket(uint64_t hash, const char country_code[8], const CassUuid &group_id) const
+size_t IpGroupEntry::Mmap::find_bucket(uint64_t hash, const char country_code[7], const CassUuid &group_id) const
 {
     size_t index = hash & (HASH_TABLE_SIZE - 1);
     size_t start_index = index;

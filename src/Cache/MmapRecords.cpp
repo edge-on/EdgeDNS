@@ -56,7 +56,7 @@ bool Records::Mmap::init(const char *filepath)
     }
 
     // Here just for a while (when we remove deleting file every time, this block will be work just if is_new_file is false)
-    for (int32_t i = 0; i <= ID_HASH_TABLE_SIZE; ++i)
+    for (int32_t i = 0; i < ID_HASH_TABLE_SIZE; ++i)
     {
         if (id_hash_table[i].slot_idx != -1)
             id_hash_table[i].slot_idx = -1;
@@ -139,7 +139,7 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name,
     if (new_slot_idx == -1)
         return false;
 
-    uint64_t id_hash = calculate_id_hash(id) % ID_HASH_TABLE_SIZE;
+    uint64_t id_hash = calculate_id_hash(id) & (ID_HASH_TABLE_SIZE - 1);
     if (id_hash_table[id_hash].slot_idx != -1)
         return false;
 
@@ -201,7 +201,7 @@ bool Records::Mmap::delete_record(const std::vector<uint8_t> &wire_name, int32_t
 
 bool Records::Mmap::delete_record_from_uuid(CassUuid id)
 {
-    uint64_t id_hash = calculate_id_hash(id) % ID_HASH_TABLE_SIZE;
+    uint64_t id_hash = calculate_id_hash(id) & (ID_HASH_TABLE_SIZE - 1);
 
     uint64_t slot_idx = id_hash_table[id_hash].slot_idx;
     uint64_t bucket_idx = data_records[slot_idx].bucket_idx;
@@ -286,7 +286,7 @@ int32_t Records::Mmap::pop_free_slot()
 
 void Records::Mmap::push_free_slot(int32_t slotidx)
 {
-    id_hash_table[calculate_id_hash(data_records[slotidx].id) % ID_HASH_TABLE_SIZE].slot_idx = -1;
+    id_hash_table[calculate_id_hash(data_records[slotidx].id) & (ID_HASH_TABLE_SIZE - 1)].slot_idx = -1;
 
     data_records[slotidx].is_used = false;
     std::memset(data_records[slotidx].payload.data(), 0, data_records[slotidx].payload.size());

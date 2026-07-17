@@ -28,14 +28,15 @@ namespace IpGroupEntry
 
     struct __attribute__((packed)) IpGroupEntry
     {
-        CassUuid group_id;          // 16 Byte
-        CassUuid id;                // 16 Byte
-        char country_code[11];      // 11 Byte
-        std::array<uint8_t, 16> ip; // 16 Byte
-        int len;                    // 4 Byte
-        int priority;               // 4 Byte
-        bool is_used;               // 1 Byte
-        int32_t next_index = -1;    // 4 byte
+        CassUuid group_id;       // 16 Byte
+        CassUuid id;             // 16 Byte
+        char country_code[7];    // 7 Byte
+        uint8_t ip[16];          // 16 Byte
+        int len;                 // 4 Byte
+        int priority;            // 4 Byte
+        bool is_used;            // 1 Byte
+        int32_t next_index = -1; // 4 byte
+        int32_t prev_index = -1; // 4 byte
     }; // 72 Byte
 
     struct __attribute__((packed)) IDBucket
@@ -64,14 +65,14 @@ namespace IpGroupEntry
         uint64_t calculate_hash_from_uuid(const CassUuid &uuid) const;
         int32_t pop_free_slot();
         void push_free_slot(int32_t slotidx);
-        size_t find_bucket(uint64_t hash, const char country_code[8], const CassUuid &groupId) const;
+        size_t find_bucket(uint64_t hash, const char country_code[7], const CassUuid &groupId) const;
 
     public:
         bool init(const char *filepath);
 
-        bool get_record(const CassUuid group_id, char country_code[8], std::vector<IpGroupEntryResponse> &out_entries);
-        bool append_record(CassUuid groupId, CassUuid id, char countryCode[8], std::vector<uint8_t> val, int priority);
-        bool delete_record(const CassUuid group_id, char country_code[8], int priority);
+        bool get_record(const CassUuid group_id, char country_code[7], std::vector<IpGroupEntryResponse> &out_entries);
+        bool append_record(CassUuid groupId, CassUuid id, char countryCode[7], std::vector<uint8_t> val, int priority);
+        bool delete_record(const CassUuid group_id, char country_code[7], int priority);
         bool delete_record_from_uuid(CassUuid group_id, CassUuid id);
 
         ~Mmap();
