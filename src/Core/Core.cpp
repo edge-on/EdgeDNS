@@ -333,7 +333,7 @@ void Core::worker(int th)
                         char idStr[40] = {0};
                         char groupIdStr[40] = {0};
                         char value[4096] = {0};
-                        char isGeoStr[1] = {0};
+                        char isGeoStr[2] = {0};
 
                         if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "zone", zone, sizeof(zone)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "rec_type", type, sizeof(type)) &&
@@ -366,7 +366,7 @@ void Core::worker(int th)
                                          // Prio
                                          (uint16_t)atoi(prio),
                                          // Value
-                                         std::vector<uint8_t>(),
+                                         RData::generateRData("", 0),
                                          // Group ID
                                          groupId,
                                          // ID
@@ -451,12 +451,12 @@ void Core::worker(int th)
                                          // isGeo
                                          true});
 
-                                response = "HTTP/1.1 200 OK\r\n"
-                                           "Content-Type: text/plain\r\n"
-                                           "Connection: close\r\n"
-                                           "Content-Length: 1\r\n"
-                                           "\r\n"
-                                           "0";
+                                    response = "HTTP/1.1 200 OK\r\n"
+                                               "Content-Type: text/plain\r\n"
+                                               "Connection: close\r\n"
+                                               "Content-Length: 1\r\n"
+                                               "\r\n"
+                                               "0";
                                 }
                                 else
                                 {
@@ -575,7 +575,7 @@ void Core::worker(int th)
                                 }
                                 }
                         }
-                        else if (op == 3 &&
+                        else if (op == '3' &&
                                  Utils::String::getParamFromCharBuffer((char *)queryBuf, "group_id", groupIdStr, sizeof(groupIdStr)) &&
                                  Utils::String::getParamFromCharBuffer((char *)queryBuf, "db_id", idStr, sizeof(idStr)))
                         {

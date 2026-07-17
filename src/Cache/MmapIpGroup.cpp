@@ -128,7 +128,7 @@ bool IpGroupEntry::Mmap::append_record(CassUuid groupId, CassUuid id, char count
     if (new_slot_idx == -1)
         return false;
 
-    uint64_t idHash = calculate_hash_from_uuid(id) & ID_HASH_TABLE_SIZE;
+    uint64_t idHash = calculate_hash_from_uuid(id) % ID_HASH_TABLE_SIZE;
     if (id_hash_table[idHash].slot_idx != -1)
         return false;
 
@@ -188,7 +188,8 @@ bool IpGroupEntry::Mmap::delete_record(const CassUuid group_id, char country_cod
 
 bool IpGroupEntry::Mmap::delete_record_from_uuid(CassUuid group_id, CassUuid id)
 {
-    uint64_t id_hash = calculate_hash_from_uuid(id);
+    uint64_t id_hash = calculate_hash_from_uuid(id) % ID_HASH_TABLE_SIZE;
+
     if (id_hash_table[id_hash].slot_idx == -1)
         return false;
 
@@ -270,8 +271,6 @@ void IpGroupEntry::Mmap::push_free_slot(int32_t slotidx)
     free_list_head_idx = slotidx;
 }
 
-// In here there are an o(n) complexity for location code search
-// We should make o(1) complexity
 size_t IpGroupEntry::Mmap::find_bucket(uint64_t hash, const char country_code[8], const CassUuid &group_id) const
 {
     size_t index = hash & (HASH_TABLE_SIZE - 1);

@@ -40,7 +40,7 @@ namespace IpGroupEntry
 
     struct __attribute__((packed)) IDBucket
     {
-        uint64_t slot_idx; // 16 Byte
+        int64_t slot_idx; // 16 Byte
     }; // 16 Byte
 
     struct IpGroupEntryResponse
