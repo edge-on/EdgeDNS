@@ -484,7 +484,6 @@ void Core::worker(int th)
                         }
                         else if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "db_id", idStr, sizeof(idStr)) && op == '3')
                         {
-                            std::cout << idStr << std::endl;
                             CassUuid id;
                             cass_uuid_from_string(idStr, &id);
 

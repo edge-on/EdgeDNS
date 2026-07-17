@@ -230,6 +230,8 @@ bool Records::Mmap::delete_record_from_uuid(CassUuid id)
         hash_table[bucket_idx].qtype = 0;
         hash_table[bucket_idx].head_slot_idx = -1;
     }
+
+    return true;
 }
 
 uint64_t Records::Mmap::calculate_hash(const uint8_t *wire_name, size_t len) const

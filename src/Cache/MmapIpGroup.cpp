@@ -217,6 +217,8 @@ bool IpGroupEntry::Mmap::delete_record_from_uuid(CassUuid group_id, CassUuid id)
         hash_table[bucket_idx].group_id_hash = 0;
         hash_table[bucket_idx].head_slot_idx = 0;
     }
+
+    return true;
 }
 
 uint64_t IpGroupEntry::Mmap::calculate_hash_from_uuid(const CassUuid &uuid) const
