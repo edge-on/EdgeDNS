@@ -336,9 +336,9 @@ void Core::worker(int th)
                         char isGeoStr[1] = {0};
 
                         if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "zone", zone, sizeof(zone)) &&
-                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "type", type, sizeof(type)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "rec_type", type, sizeof(type)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "ttl", ttl, sizeof(ttl)) &&
-                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "prio", prio, sizeof(prio)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "priority", prio, sizeof(prio)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "name", name, sizeof(name)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "db_id", idStr, sizeof(idStr)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "group_id", groupIdStr, sizeof(groupIdStr)) &&
@@ -352,9 +352,9 @@ void Core::worker(int th)
 
                             switch (op)
                             {
-                            case 1: // Add
+                            case '1': // Add
                             {
-                                auto nameWire = Utils::Vector::stringToWire(name, 0);
+                                auto nameWire = Utils::Vector::stringToWire(name, 1);
                                 if (isGeoStr[0] == '1')
                                 {
                                     Operational::addQueueForRecord(
@@ -427,9 +427,9 @@ void Core::worker(int th)
                                 break;
                             }
 
-                            case 2: // Update
+                            case '2': // Update
                                 Main::recordsMap->delete_record_from_uuid(id);
-                                auto nameWire = Utils::Vector::stringToWire(name, 0);
+                                auto nameWire = Utils::Vector::stringToWire(name, 1);
                                 if (isGeoStr[0] == '1')
                                 {
                                     Operational::addQueueForRecord(
@@ -450,28 +450,6 @@ void Core::worker(int th)
                                          0,
                                          // isGeo
                                          true});
-                                }
-                                else
-                                {
-                                    Operational::addQueueForRecord(
-                                        nameWire.data(),
-                                        nameWire.size(),
-                                        atoi(type),
-                                        {// TTL
-                                         (uint32_t)atoi(ttl),
-                                         // Prio
-                                         (uint16_t)atoi(prio),
-                                         // Value
-                                         RData::generateRData(value, atoi(type)),
-                                         // Group ID
-                                         groupId,
-                                         // ID
-                                         id,
-                                         // Bucket idx (unnecessary)
-                                         0,
-                                         // isGeo
-                                         false});
-                                }
 
                                 response = "HTTP/1.1 200 OK\r\n"
                                            "Content-Type: text/plain\r\n"
@@ -479,6 +457,48 @@ void Core::worker(int th)
                                            "Content-Length: 1\r\n"
                                            "\r\n"
                                            "0";
+                                }
+                                else
+                                {
+                                    if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "value", value, sizeof(value)))
+                                    {
+                                        Operational::addQueueForRecord(
+                                            nameWire.data(),
+                                            nameWire.size(),
+                                            atoi(type),
+                                            {// TTL
+                                             (uint32_t)atoi(ttl),
+                                             // Prio
+                                             (uint16_t)atoi(prio),
+                                             // Value
+                                             RData::generateRData(value, atoi(type)),
+                                             // Group ID
+                                             groupId,
+                                             // ID
+                                             id,
+                                             // Bucket idx (unnecessary)
+                                             0,
+                                             // isGeo
+                                             false});
+
+                                        response = "HTTP/1.1 200 OK\r\n"
+                                                   "Content-Type: text/plain\r\n"
+                                                   "Connection: close\r\n"
+                                                   "Content-Length: 1\r\n"
+                                                   "\r\n"
+                                                   "0";
+                                    }
+                                    else
+                                    {
+                                        response = "HTTP/1.1 200 OK\r\n"
+                                                   "Content-Type: text/plain\r\n"
+                                                   "Connection: close\r\n"
+                                                   "Content-Length: 1\r\n"
+                                                   "\r\n"
+                                                   "1";
+                                    }
+                                }
+
                                 break;
                             }
                         }
