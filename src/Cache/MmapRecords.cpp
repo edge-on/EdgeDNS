@@ -47,7 +47,8 @@ bool Records::Mmap::init(const char *filepath)
         for (size_t i = 0; i < MAX_DATA_RECORDS; ++i)
         {
             data_records[i].is_used = false;
-            data_records[i].next_index = (i == MAX_DATA_RECORDS - 1) ? -1 : static_cast<int32_t>(i + 1);
+            data_records[i].next_index = -1;
+            data_records[i].prev_index = -1;
             data_records[i].ttl = 0;
             data_records[i].priority = 0;
             data_records[i].rdata_len = 0;
@@ -168,7 +169,9 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name,
     }
     else
     {
+        data_records[hash_table[bucket_idx].head_slot_idx].prev_index = new_slot_idx;
         data_records[new_slot_idx].next_index = hash_table[bucket_idx].head_slot_idx;
+
         hash_table[bucket_idx].head_slot_idx = new_slot_idx;
     }
     return true;
@@ -208,28 +211,24 @@ bool Records::Mmap::delete_record_from_uuid(CassUuid id)
     if (bucket_idx == -1)
         return false;
 
-    bool is_only = false;
-
-    // If there are an next idx and this is the first block
     if (slot_idx == hash_table[bucket_idx].head_slot_idx &&
         data_records[slot_idx].next_index != -1)
     {
-        hash_table[bucket_idx].head_slot_idx = data_records[slot_idx].next_index;
-    }
-    else
-    {
-        // this is only block in the bucket, we can remove hash safely
-        is_only = true;
-    }
+        if (data_records[slot_idx].prev_index == -1)
+            hash_table[bucket_idx].head_slot_idx = data_records[slot_idx].next_index;
 
-    push_free_slot(slot_idx);
-
-    if (is_only)
+        if (data_records[slot_idx].prev_index != -1)
+            data_records[data_records[slot_idx].prev_index].next_index = data_records[slot_idx].next_index;
+    }
+    else if (data_records[slot_idx].prev_index == -1)
     {
         hash_table[bucket_idx].name_hash = 0;
         hash_table[bucket_idx].qtype = 0;
         hash_table[bucket_idx].head_slot_idx = -1;
     }
+
+    push_free_slot(slot_idx);
+    id_hash_table[id_hash].slot_idx = -1;
 
     return true;
 }

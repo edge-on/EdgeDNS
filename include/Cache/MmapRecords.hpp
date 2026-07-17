@@ -30,6 +30,7 @@ namespace Records
     {
         bool is_used;                     // 1 Byte
         int32_t next_index;               // 4 Byte
+        int32_t prev_index;               // 4 Byte
         uint32_t ttl;                     // 4 Byte
         uint16_t priority;                // 2 Byte
         bool is_geo;                      // 1 Byte
@@ -37,8 +38,8 @@ namespace Records
         CassUuid group_id;                // 16 Byte
         CassUuid id;                      // 16 Byte
         uint64_t bucket_idx;              // 16 Byte
-        std::array<uint8_t, 251> payload; // 251 Byte
-    }; // 312 Byte
+        std::array<uint8_t, 255> payload; // 255 Byte
+    }; // 320 Byte
 
     struct __attribute__((packed)) IDBucket
     {
