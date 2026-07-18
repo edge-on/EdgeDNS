@@ -72,6 +72,7 @@ namespace IpGroupEntry
 
         bool get_record(const CassUuid group_id, char country_code[7], std::vector<IpGroupEntryResponse> &out_entries);
         bool append_record(CassUuid groupId, CassUuid id, char countryCode[7], std::vector<uint8_t> val, int priority);
+        bool update_record(CassUuid groupId, CassUuid id, char countryCode[7], std::vector<uint8_t> val, int priority);
         bool delete_record(const CassUuid group_id, char country_code[7], int priority);
         bool delete_record_from_uuid(CassUuid group_id, CassUuid id);
 

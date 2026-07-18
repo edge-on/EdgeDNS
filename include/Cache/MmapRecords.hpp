@@ -43,8 +43,8 @@ namespace Records
 
     struct __attribute__((packed)) IDBucket
     {
-        uint64_t slot_idx = -1;
-    }; // 16 Byte
+        int64_t slot_idx = -1;
+    }; // 8 Byte
 
     struct DNSResponseData
     {
@@ -82,6 +82,7 @@ namespace Records
                         std::vector<DNSResponseData> &out_records);
 
         bool append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, CassUuid groupId, CassUuid id, bool isGeo, const std::vector<uint8_t> &binary_rdata);
+        bool update_record(CassUuid id, uint32_t ttl, uint16_t priority, CassUuid groupId, bool isGeo, const std::vector<uint8_t> &binary_rdata);
         bool delete_record(const std::vector<uint8_t> &wire_name, int32_t qtype);
         bool delete_record_from_uuid(CassUuid id);
 

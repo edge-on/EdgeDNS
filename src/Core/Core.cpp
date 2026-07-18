@@ -10,7 +10,7 @@ Core::~Core()
 
 void Core::start()
 {
-    threadCount = 12;
+    threadCount = 1;
 
     start_clock_thread();
 
@@ -358,24 +358,15 @@ void Core::worker(int th)
                                 auto nameWire = Utils::Vector::stringToWire(name, 1);
                                 if (isGeoStr[0] == '1')
                                 {
-                                    Operational::addQueueForRecord(
-                                        nameWire.data(),
-                                        nameWire.size(),
+                                    Main::recordsMap->append_record(
+                                        nameWire,
                                         atoi(type),
-                                        {// TTL
-                                         (uint32_t)atoi(ttl),
-                                         // Prio
-                                         (uint16_t)atoi(prio),
-                                         // Value
-                                         RData::generateRData("", 0),
-                                         // Group ID
-                                         groupId,
-                                         // ID
-                                         id,
-                                         // Bucket idx (unnecessary)
-                                         0,
-                                         // isGeo
-                                         true});
+                                        (uint32_t)atoi(ttl),
+                                        (uint16_t)atoi(prio),
+                                        groupId,
+                                        id,
+                                        true,
+                                        std::vector<uint8_t>());
 
                                     response = "HTTP/1.1 200 OK\r\n"
                                                "Content-Type: text/plain\r\n"
@@ -388,24 +379,15 @@ void Core::worker(int th)
                                 {
                                     if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "value", value, sizeof(value)))
                                     {
-                                        Operational::addQueueForRecord(
-                                            nameWire.data(),
-                                            nameWire.size(),
+                                        Main::recordsMap->append_record(
+                                            nameWire,
                                             atoi(type),
-                                            {// TTL
-                                             (uint32_t)atoi(ttl),
-                                             // Prio
-                                             (uint16_t)atoi(prio),
-                                             // Value
-                                             RData::generateRData(value, atoi(type)),
-                                             // Group ID
-                                             groupId,
-                                             // ID
-                                             id,
-                                             // Bucket idx (unnecessary)
-                                             0,
-                                             // isGeo
-                                             false});
+                                            (uint32_t)atoi(ttl),
+                                            (uint16_t)atoi(prio),
+                                            groupId,
+                                            id,
+                                            false,
+                                            RData::generateRData(value, atoi(type)));
 
                                         response = "HTTP/1.1 200 OK\r\n"
                                                    "Content-Type: text/plain\r\n"
@@ -429,28 +411,29 @@ void Core::worker(int th)
                             }
 
                             case '2': // Update
-                                Main::recordsMap->delete_record_from_uuid(id);
+                            {
                                 auto nameWire = Utils::Vector::stringToWire(name, 1);
                                 if (isGeoStr[0] == '1')
                                 {
-                                    Operational::addQueueForRecord(
-                                        nameWire.data(),
-                                        nameWire.size(),
-                                        atoi(type),
-                                        {// TTL
-                                         (uint32_t)atoi(ttl),
-                                         // Prio
-                                         (uint16_t)atoi(prio),
-                                         // Value
-                                         std::vector<uint8_t>(),
-                                         // Group ID
-                                         groupId,
-                                         // ID
-                                         id,
-                                         // Bucket idx (unnecessary)
-                                         0,
-                                         // isGeo
-                                         true});
+                                    if (!Main::recordsMap->update_record(
+                                            id,
+                                            (uint32_t)atoi(ttl),
+                                            (uint16_t)atoi(prio),
+                                            groupId,
+                                            true,
+                                            std::vector<uint8_t>()))
+                                    {
+                                        Main::recordsMap->delete_record_from_uuid(id);
+                                        Main::recordsMap->append_record(
+                                            nameWire,
+                                            atoi(type),
+                                            (uint32_t)atoi(ttl),
+                                            (uint16_t)atoi(prio),
+                                            groupId,
+                                            id,
+                                            true,
+                                            std::vector<uint8_t>());
+                                    }
 
                                     response = "HTTP/1.1 200 OK\r\n"
                                                "Content-Type: text/plain\r\n"
@@ -463,24 +446,26 @@ void Core::worker(int th)
                                 {
                                     if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "value", value, sizeof(value)))
                                     {
-                                        Operational::addQueueForRecord(
-                                            nameWire.data(),
-                                            nameWire.size(),
-                                            atoi(type),
-                                            {// TTL
-                                             (uint32_t)atoi(ttl),
-                                             // Prio
-                                             (uint16_t)atoi(prio),
-                                             // Value
-                                             RData::generateRData(value, atoi(type)),
-                                             // Group ID
-                                             groupId,
-                                             // ID
-                                             id,
-                                             // Bucket idx (unnecessary)
-                                             0,
-                                             // isGeo
-                                             false});
+                                        auto rdata = RData::generateRData(value, atoi(type));
+                                        if (!Main::recordsMap->update_record(
+                                                id,
+                                                (uint32_t)atoi(ttl),
+                                                (uint16_t)atoi(prio),
+                                                groupId,
+                                                false,
+                                                rdata))
+                                        {
+                                            Main::recordsMap->delete_record_from_uuid(id);
+                                            Main::recordsMap->append_record(
+                                                nameWire,
+                                                atoi(type),
+                                                (uint32_t)atoi(ttl),
+                                                (uint16_t)atoi(prio),
+                                                groupId,
+                                                id,
+                                                false,
+                                                rdata);
+                                        }
 
                                         response = "HTTP/1.1 200 OK\r\n"
                                                    "Content-Type: text/plain\r\n"
@@ -501,6 +486,7 @@ void Core::worker(int th)
                                 }
 
                                 break;
+                            }
                             }
                         }
                         else if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "db_id", idStr, sizeof(idStr)) && op == '3')
@@ -552,7 +538,7 @@ void Core::worker(int th)
                                 {
                                 case '1': // Add
                                 {
-                                    Operational::addQueueForEntry(groupId, locationCode, {id, RData::generateRData(ip, 1), atoi(priority)});
+                                    Main::ipGroupMap->append_record(groupId, id, locationCode, RData::generateRData(ip, 1), atoi(priority));
                                     response = "HTTP/1.1 200 OK\r\n"
                                                "Content-Type: text/plain\r\n"
                                                "Connection: close\r\n"
@@ -564,8 +550,12 @@ void Core::worker(int th)
 
                                 case '2': // Update
                                 {
-                                    Main::ipGroupMap->delete_record_from_uuid(groupId, id);
-                                    Operational::addQueueForEntry(groupId, locationCode, {id, RData::generateRData(ip, 1), atoi(priority)});
+                                    auto rdata = RData::generateRData(ip, 1);
+                                    if (!Main::ipGroupMap->update_record(groupId, id, locationCode, rdata, atoi(priority)))
+                                    {
+                                        Main::ipGroupMap->delete_record_from_uuid(groupId, id);
+                                        Main::ipGroupMap->append_record(groupId, id, locationCode, rdata, atoi(priority));
+                                    }
                                     response = "HTTP/1.1 200 OK\r\n"
                                                "Content-Type: text/plain\r\n"
                                                "Connection: close\r\n"
@@ -832,9 +822,12 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
                 t_ipGroupEntries.clear();
 
                 char countryCode[8];
-                memcpy(countryCode, Static::dns->getCountry(ip_str).data(), 8);
-                if (countryCode)
+
+                auto country = Static::dns->getCountry(ip_str);
+                if (country.empty())
                     memcpy(countryCode, "DEFAULT", 8);
+                else
+                    memcpy(countryCode, country.data(), 8);
 
                 Main::ipGroupMap->get_record(record.group_id, countryCode, t_ipGroupEntries);
 
@@ -957,9 +950,10 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
 
     if (is_tcp)
     {
+        std::memmove(out + 2, out, rlen);
         out[0] = (rlen >> 8) & 0xFF;
         out[1] = rlen & 0xFF;
-        memcpy(out + 2, out, rlen);
+        rlen += 2;
     }
 
     return rlen;
