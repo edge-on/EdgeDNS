@@ -259,7 +259,6 @@ bool Records::Mmap::update_record(CassUuid id, uint32_t ttl, uint16_t priority, 
 
     if (!isGeo)
     {
-        data_records[slot_idx].payload = std::array<uint8_t, 255>();
         std::memset(data_records[slot_idx].payload.data(), 0, data_records[slot_idx].payload.size());
         data_records[slot_idx].rdata_len = static_cast<uint8_t>(binary_rdata.size());
         std::memcpy(data_records[slot_idx].payload.data(), binary_rdata.data(), binary_rdata.size());

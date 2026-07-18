@@ -268,6 +268,8 @@ void Core::worker(int th)
             size_t payload_len = io_uring_recvmsg_payload_length(o, cqe->res, &conn.msgHdr);
 
             uint8_t queryBuf[4096];
+            std::memset(queryBuf, 0, sizeof(queryBuf));
+
             size_t queryLen = std::min(payload_len, sizeof(queryBuf));
             memcpy(queryBuf, payload, queryLen);
 
