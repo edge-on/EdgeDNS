@@ -107,7 +107,6 @@ bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[7]
         node.priority = data_entries[current_slot].priority;
         node.id = data_entries[current_slot].id;
 
-        std::cout << "here works - " << current_slot << " - Next IDX: " << data_entries[current_slot].next_index << " - Head IDX: " << hash_table[bucket_idx].head_slot_idx << std::endl;
         out_entries.push_back(node);
 
         current_slot = data_entries[current_slot].next_index;

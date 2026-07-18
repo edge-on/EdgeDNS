@@ -621,8 +621,12 @@ void Core::worker(int th)
                 socklen_t peerLen = o->namelen;
 
                 char ipStr[INET6_ADDRSTRLEN] = {0};
+                uint32_t ip;
                 if (peerAddr.ss_family == AF_INET)
+                {
+                    ip = ((sockaddr_in *)&peerAddr)->sin_addr.s_addr;
                     inet_ntop(AF_INET, &((sockaddr_in *)&peerAddr)->sin_addr, ipStr, sizeof(ipStr));
+                }
                 else if (peerAddr.ss_family == AF_INET6)
                     inet_ntop(AF_INET6, &((sockaddr_in6 *)&peerAddr)->sin6_addr, ipStr, sizeof(ipStr));
 
@@ -631,7 +635,7 @@ void Core::worker(int th)
                 memcpy(&ctx->peerAddr, &peerAddr, peerLen);
                 ctx->peerLen = peerLen;
 
-                ctx->len = handle(queryBuf, false, conn.ip, conn.ip_str, thread, ctx->writeBuffer);
+                ctx->len = handle(queryBuf, false, ip, ipStr, thread, ctx->writeBuffer);
 
                 ctx->iov.iov_base = ctx->writeBuffer;
                 ctx->iov.iov_len = ctx->len;
@@ -826,14 +830,20 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
             if (record.is_geo)
             {
                 t_ipGroupEntries.clear();
-                Main::ipGroupMap->get_record(record.group_id, "AF", t_ipGroupEntries);
+
+                char countryCode[8];
+                memcpy(countryCode, Static::dns->getCountry(ip_str).data(), 8);
+                if (countryCode)
+                    memcpy(countryCode, "DEFAULT", 8);
+
+                Main::ipGroupMap->get_record(record.group_id, countryCode, t_ipGroupEntries);
 
                 if (t_ipGroupEntries.empty())
                 {
-                    t_ipGroupEntries = DB::Record::getIpGroupEntriesCountryBased(record.group_id, "AF");
+                    t_ipGroupEntries = DB::Record::getIpGroupEntriesCountryBased(record.group_id, countryCode);
 
                     for (auto &entry : t_ipGroupEntries)
-                        Operational::addQueueForEntry(record.group_id, "AF", {entry.id, entry.ip, entry.priority});
+                        Operational::addQueueForEntry(record.group_id, countryCode, {entry.id, entry.ip, entry.priority});
                 }
 
                 for (auto &entry : t_ipGroupEntries)
