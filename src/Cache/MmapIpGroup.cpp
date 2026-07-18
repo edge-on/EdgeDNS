@@ -107,6 +107,7 @@ bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[7]
         node.priority = data_entries[current_slot].priority;
         node.id = data_entries[current_slot].id;
 
+        std::cout << "here works - " << current_slot << " - Next IDX: " << data_entries[current_slot].next_index << " - Head IDX: " << hash_table[bucket_idx].head_slot_idx << std::endl;
         out_entries.push_back(node);
 
         current_slot = data_entries[current_slot].next_index;
@@ -193,31 +194,30 @@ bool IpGroupEntry::Mmap::delete_record_from_uuid(CassUuid group_id, CassUuid id)
     if (id_hash_table[id_hash].slot_idx == -1)
         return false;
 
-    uint64_t slot_idx = id_hash_table[id_hash].slot_idx;
+    int32_t slot_idx = id_hash_table[id_hash].slot_idx;
+    uint64_t hash = calculate_hash_from_uuid(group_id);
+    size_t bucket_idx = find_bucket(hash, data_entries[slot_idx].country_code, group_id);
 
-    uint64_t hash = calculate_hash_from_uuid(id);
-    uint64_t bucket_idx = find_bucket(hash, data_entries[slot_idx].country_code, group_id);
+    int32_t prev = data_entries[slot_idx].prev_index;
+    int32_t next = data_entries[slot_idx].next_index;
 
-    if (slot_idx == hash_table[bucket_idx].head_slot_idx &&
-        data_entries[slot_idx].next_index != -1)
+    if (prev == -1)
     {
-        if (data_entries[slot_idx].prev_index == -1)
-            hash_table[bucket_idx].head_slot_idx = data_entries[slot_idx].next_index;
-
-        if (data_entries[slot_idx].prev_index != -1)
-        {
-            data_entries[data_entries[slot_idx].next_index].prev_index = data_entries[slot_idx].prev_index;
-            data_entries[data_entries[slot_idx].prev_index].next_index = data_entries[slot_idx].next_index;
-        }
-    }
-    else if (data_entries[slot_idx].prev_index != -1)
-    {
-        data_entries[data_entries[slot_idx].prev_index].next_index = -1;
+        hash_table[bucket_idx].head_slot_idx = next;
     }
     else
     {
+        data_entries[prev].next_index = next;
+    }
+
+    if (next != -1)
+    {
+        data_entries[next].prev_index = prev;
+    }
+
+    if (hash_table[bucket_idx].head_slot_idx == -1)
+    {
         hash_table[bucket_idx].group_id_hash = 0;
-        hash_table[bucket_idx].head_slot_idx = 0;
     }
 
     push_free_slot(slot_idx);

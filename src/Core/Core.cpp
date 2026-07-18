@@ -215,11 +215,12 @@ void Core::worker(int th)
                 conn.ip_str = ip_str;
             }
 
+            /*
             if (conn.type == Gen::SYNC && strcmp(conn.ip_str, "127.0.0.1") != 0)
             {
                 close(res);
                 continue;
-            }
+            }*/
 
             thread.connections[clientFd] = std::move(conn);
 

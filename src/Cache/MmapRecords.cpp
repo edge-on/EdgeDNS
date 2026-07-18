@@ -205,29 +205,33 @@ bool Records::Mmap::delete_record(const std::vector<uint8_t> &wire_name, int32_t
 bool Records::Mmap::delete_record_from_uuid(CassUuid id)
 {
     uint64_t id_hash = calculate_id_hash(id) & (ID_HASH_TABLE_SIZE - 1);
+    int32_t slot_idx = id_hash_table[id_hash].slot_idx;
 
-    uint64_t slot_idx = id_hash_table[id_hash].slot_idx;
-    uint64_t bucket_idx = data_records[slot_idx].bucket_idx;
-    if (bucket_idx == -1)
+    if (slot_idx == -1 || slot_idx >= static_cast<int32_t>(MAX_DATA_RECORDS))
         return false;
 
-    if (slot_idx == hash_table[bucket_idx].head_slot_idx &&
-        data_records[slot_idx].next_index != -1)
-    {
-        if (data_records[slot_idx].prev_index == -1)
-            hash_table[bucket_idx].head_slot_idx = data_records[slot_idx].next_index;
+    int32_t bucket_idx = data_records[slot_idx].bucket_idx;
+    int32_t prev = data_records[slot_idx].prev_index;
+    int32_t next = data_records[slot_idx].next_index;
 
-        if (data_records[slot_idx].prev_index != -1)
-        {
-            data_records[data_records[slot_idx].next_index].prev_index = data_records[slot_idx].prev_index;
-            data_records[data_records[slot_idx].prev_index].next_index = data_records[slot_idx].next_index;
-        }
+    if (prev != -1)
+    {
+        data_records[prev].next_index = next;
     }
-    else if (data_records[slot_idx].prev_index == -1)
+    else
+    {
+        hash_table[bucket_idx].head_slot_idx = next;
+    }
+
+    if (next != -1)
+    {
+        data_records[next].prev_index = prev;
+    }
+
+    if (hash_table[bucket_idx].head_slot_idx == -1)
     {
         hash_table[bucket_idx].name_hash = 0;
         hash_table[bucket_idx].qtype = 0;
-        hash_table[bucket_idx].head_slot_idx = -1;
     }
 
     push_free_slot(slot_idx);
