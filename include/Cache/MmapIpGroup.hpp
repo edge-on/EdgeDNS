@@ -30,14 +30,14 @@ namespace IpGroupEntry
     {
         CassUuid group_id;       // 16 Byte
         CassUuid id;             // 16 Byte
-        char country_code[7];    // 7 Byte
+        char country_code[15];   // 15 Byte
         uint8_t ip[16];          // 16 Byte
         int len;                 // 4 Byte
         int priority;            // 4 Byte
         bool is_used;            // 1 Byte
         int32_t next_index = -1; // 4 byte
         int32_t prev_index = -1; // 4 byte
-    }; // 72 Byte
+    }; // 80 Byte
 
     struct __attribute__((packed)) IDBucket
     {
