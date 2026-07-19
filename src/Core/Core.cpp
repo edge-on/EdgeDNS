@@ -337,6 +337,7 @@ void Core::worker(int th)
                         char groupIdStr[40] = {0};
                         char value[4096] = {0};
                         char isGeoStr[2] = {0};
+                        char isProxyStr[2] = {0};
 
                         if (Utils::String::getParamFromCharBuffer((char *)queryBuf, "zone", zone, sizeof(zone)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "rec_type", type, sizeof(type)) &&
@@ -345,13 +346,16 @@ void Core::worker(int th)
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "name", name, sizeof(name)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "db_id", idStr, sizeof(idStr)) &&
                             Utils::String::getParamFromCharBuffer((char *)queryBuf, "group_id", groupIdStr, sizeof(groupIdStr)) &&
-                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "is_geo", isGeoStr, sizeof(isGeoStr)))
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "is_geo", isGeoStr, sizeof(isGeoStr)) &&
+                            Utils::String::getParamFromCharBuffer((char *)queryBuf, "is_proxy", isProxyStr, sizeof(isProxyStr)))
                         {
                             CassUuid groupId;
                             cass_uuid_from_string(groupIdStr, &groupId);
 
                             CassUuid id;
                             cass_uuid_from_string(idStr, &id);
+
+                            bool isProxy = isProxyStr[0] == '1';
 
                             switch (op)
                             {
@@ -368,6 +372,7 @@ void Core::worker(int th)
                                         groupId,
                                         id,
                                         true,
+                                        isProxy,
                                         std::vector<uint8_t>());
 
                                     response = "HTTP/1.1 200 OK\r\n"
@@ -389,6 +394,7 @@ void Core::worker(int th)
                                             groupId,
                                             id,
                                             false,
+                                            isProxy,
                                             RData::generateRData(value, atoi(type)));
 
                                         response = "HTTP/1.1 200 OK\r\n"
@@ -423,6 +429,7 @@ void Core::worker(int th)
                                             (uint16_t)atoi(prio),
                                             groupId,
                                             true,
+                                            isProxy,
                                             std::vector<uint8_t>()))
                                     {
                                         Main::recordsMap->delete_record_from_uuid(id);
@@ -434,6 +441,7 @@ void Core::worker(int th)
                                             groupId,
                                             id,
                                             true,
+                                            isProxy,
                                             std::vector<uint8_t>());
                                     }
 
@@ -455,6 +463,7 @@ void Core::worker(int th)
                                                 (uint16_t)atoi(prio),
                                                 groupId,
                                                 false,
+                                                isProxy,
                                                 rdata))
                                         {
                                             Main::recordsMap->delete_record_from_uuid(id);
@@ -466,6 +475,7 @@ void Core::worker(int th)
                                                 groupId,
                                                 id,
                                                 false,
+                                                isProxy,
                                                 rdata);
                                         }
 

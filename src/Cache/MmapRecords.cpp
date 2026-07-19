@@ -139,6 +139,7 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name,
                                   CassUuid group_id,
                                   CassUuid id,
                                   bool is_geo,
+                                  bool is_proxy,
                                   const std::vector<uint8_t> &binary_rdata)
 {
     if (!is_geo && binary_rdata.size() > data_records[0].payload.size())
@@ -168,6 +169,7 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name,
     data_records[new_slot_idx].group_id = group_id;
     data_records[new_slot_idx].id = id;
     data_records[new_slot_idx].is_geo = is_geo;
+    data_records[new_slot_idx].is_proxy = is_proxy;
     data_records[new_slot_idx].bucket_idx = bucket_idx;
     data_records[new_slot_idx].is_used = true;
 
@@ -233,7 +235,7 @@ bool Records::Mmap::append_record(const std::vector<uint8_t> &wire_name,
     return true;
 }
 
-bool Records::Mmap::update_record(CassUuid id, uint32_t ttl, uint16_t priority, CassUuid groupId, bool isGeo, const std::vector<uint8_t> &binary_rdata)
+bool Records::Mmap::update_record(CassUuid id, uint32_t ttl, uint16_t priority, CassUuid groupId, bool isGeo, bool isProxy, const std::vector<uint8_t> &binary_rdata)
 {
     uint64_t id_hash = calculate_id_hash(id) & (ID_HASH_TABLE_SIZE - 1);
 
@@ -256,6 +258,7 @@ bool Records::Mmap::update_record(CassUuid id, uint32_t ttl, uint16_t priority, 
     data_records[slot_idx].priority = priority;
     data_records[slot_idx].group_id = groupId;
     data_records[slot_idx].is_geo = isGeo;
+    data_records[slot_idx].is_proxy = isProxy;
 
     if (!isGeo)
     {
@@ -415,6 +418,8 @@ void Records::Mmap::push_free_slot(int32_t slotidx)
     data_records[slotidx].id.time_and_version = 0;
     data_records[slotidx].next_index = free_list_head_idx;
     data_records[slotidx].prev_index = -1;
+    data_records[slotidx].is_geo = false;
+    data_records[slotidx].is_proxy = false;
     free_list_head_idx = slotidx;
 }
 

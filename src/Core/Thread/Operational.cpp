@@ -52,7 +52,7 @@ void Operational::queueLifeCycle()
             recordQueue.pop_front();
 
             if (rec.type == QueueType::ADD)
-                Main::recordsMap->append_record(rec.name, rec.qtype, rec.ttl, rec.prio, rec.groupId, rec.id, rec.isGeo, rec.val);
+                Main::recordsMap->append_record(rec.name, rec.qtype, rec.ttl, rec.prio, rec.groupId, rec.id, rec.isGeo, rec.isProxy, rec.val);
         }
 
         if (!entryQueue.empty())

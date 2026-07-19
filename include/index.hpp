@@ -41,6 +41,8 @@ class Main
 public:
     static Cassandra *cas;
 
+    static CassUuid proxyId;
+
     static Records::Mmap *recordsMap;
     static IpGroupEntry::Mmap *ipGroupMap;
     static System::Mmap *systemMap;

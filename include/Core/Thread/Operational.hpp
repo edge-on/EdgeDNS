@@ -31,6 +31,7 @@ public:
         CassUuid groupId;
         CassUuid id;
         bool isGeo;
+        bool isProxy;
         std::vector<uint8_t> val;
 
         QueueType type;

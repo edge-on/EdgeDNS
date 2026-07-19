@@ -34,11 +34,12 @@ namespace Records
         uint32_t ttl;                     // 4 Byte
         uint16_t priority;                // 2 Byte
         bool is_geo;                      // 1 Byte
+        bool is_proxy;                    // 1 Byte
         uint8_t rdata_len;                // 1 Byte
         CassUuid group_id;                // 16 Byte
         CassUuid id;                      // 16 Byte
         uint64_t bucket_idx;              // 16 Byte
-        std::array<uint8_t, 255> payload; // 255 Byte
+        std::array<uint8_t, 254> payload; // 254 Byte
     }; // 320 Byte
 
     struct __attribute__((packed)) IDBucket
@@ -55,6 +56,7 @@ namespace Records
         CassUuid id;
         uint64_t bucket_idx;
         bool is_geo;
+        bool is_proxy;
     };
 
     class Mmap
@@ -81,8 +83,8 @@ namespace Records
         bool get_record(const uint8_t *wire_name, size_t wire_len, int32_t qtype,
                         std::vector<DNSResponseData> &out_records);
 
-        bool append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, CassUuid groupId, CassUuid id, bool isGeo, const std::vector<uint8_t> &binary_rdata);
-        bool update_record(CassUuid id, uint32_t ttl, uint16_t priority, CassUuid groupId, bool isGeo, const std::vector<uint8_t> &binary_rdata);
+        bool append_record(const std::vector<uint8_t> &wire_name, int32_t qtype, uint32_t ttl, uint16_t priority, CassUuid groupId, CassUuid id, bool isGeo, bool isProxy, const std::vector<uint8_t> &binary_rdata);
+        bool update_record(CassUuid id, uint32_t ttl, uint16_t priority, CassUuid groupId, bool isGeo, bool isProxy, const std::vector<uint8_t> &binary_rdata);
         bool delete_record(const std::vector<uint8_t> &wire_name, int32_t qtype);
         bool delete_record_from_uuid(CassUuid id);
 

@@ -1,6 +1,7 @@
 #include "index.hpp"
 
 Cassandra *Main::cas = nullptr;
+
 Records::Mmap *Main::recordsMap = nullptr;
 IpGroupEntry::Mmap *Main::ipGroupMap = nullptr;
 System::Mmap *Main::systemMap = nullptr;
@@ -12,6 +13,8 @@ int main()
 
     if (std::filesystem::remove("local/ipGroups.bin"))
         std::cout << "Ip Group Entries Flushed Successfully!" << std::endl;
+
+    cass_uuid_from_string("a8b87013-9ff1-4831-859d-c2d3543562d7", &Main::proxyId);
 
     Static::dns->init();
 
