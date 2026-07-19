@@ -43,6 +43,8 @@ public:
 
     static CassUuid proxyId;
 
+    static uint8_t countryCode[8];
+
     static Records::Mmap *recordsMap;
     static IpGroupEntry::Mmap *ipGroupMap;
     static System::Mmap *systemMap;

@@ -94,7 +94,7 @@ bool IpGroupEntry::Mmap::init(const char *filepath)
     return true;
 }
 
-bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[7], std::vector<IpGroupEntryResponse> &out_entries)
+bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[8], std::vector<IpGroupEntryResponse> &out_entries)
 {
     out_entries.clear();
     uint64_t hash = calculate_hash_from_uuid(group_id);
@@ -128,10 +128,16 @@ bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[7]
 
         current_slot = next_slot;
     }
+
+    if (out_entries.empty())
+    {
+        get_record(group_id, "DEFAULT", out_entries);
+    }
+
     return !out_entries.empty();
 }
 
-bool IpGroupEntry::Mmap::append_record(CassUuid groupId, CassUuid id, char countryCode[7], std::vector<uint8_t> val, int priority)
+bool IpGroupEntry::Mmap::append_record(CassUuid groupId, CassUuid id, char countryCode[8], std::vector<uint8_t> val, int priority)
 {
     uint64_t hash = calculate_hash_from_uuid(groupId);
     size_t bucket_idx = find_bucket(hash, countryCode, groupId);
@@ -208,7 +214,7 @@ bool IpGroupEntry::Mmap::append_record(CassUuid groupId, CassUuid id, char count
     return true;
 }
 
-bool IpGroupEntry::Mmap::update_record(CassUuid groupId, CassUuid id, char countryCode[7], std::vector<uint8_t> val, int priority)
+bool IpGroupEntry::Mmap::update_record(CassUuid groupId, CassUuid id, char countryCode[8], std::vector<uint8_t> val, int priority)
 {
     uint64_t id_hash = calculate_hash_from_uuid(id) & (ID_HASH_TABLE_SIZE - 1);
 
@@ -235,7 +241,7 @@ bool IpGroupEntry::Mmap::update_record(CassUuid groupId, CassUuid id, char count
     return true;
 }
 
-bool IpGroupEntry::Mmap::delete_record(const CassUuid group_id, char country_code[7], int priority)
+bool IpGroupEntry::Mmap::delete_record(const CassUuid group_id, char country_code[8], int priority)
 {
     uint64_t hash = calculate_hash_from_uuid(group_id);
     size_t bucket_idx = find_bucket(hash, country_code, group_id);
@@ -384,7 +390,7 @@ void IpGroupEntry::Mmap::push_free_slot(int32_t slotidx)
     free_list_head_idx = slotidx;
 }
 
-size_t IpGroupEntry::Mmap::find_bucket(uint64_t hash, const char country_code[7], const CassUuid &group_id) const
+size_t IpGroupEntry::Mmap::find_bucket(uint64_t hash, const char country_code[8], const CassUuid &group_id) const
 {
     size_t index = hash & (HASH_TABLE_SIZE - 1);
     size_t start_index = index;

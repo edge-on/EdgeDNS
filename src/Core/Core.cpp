@@ -829,7 +829,8 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
                     truncated = true;
             }
 
-            if (record.is_proxy)
+            std::string_view ip = "127.0.0.1";
+            if (record.is_proxy && (memcmp(ip_str, ip.data(), ip.size()) != 0))
             {
                 t_ipGroupEntries.clear();
 

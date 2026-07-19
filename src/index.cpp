@@ -4,12 +4,17 @@ Cassandra *Main::cas = nullptr;
 
 CassUuid Main::proxyId;
 
+uint8_t Main::countryCode[8];
+
 Records::Mmap *Main::recordsMap = nullptr;
 IpGroupEntry::Mmap *Main::ipGroupMap = nullptr;
 System::Mmap *Main::systemMap = nullptr;
 
 int main()
 {
+    // This node is Germany
+    memcpy(Main::countryCode, "GE", 8);
+
     if (std::filesystem::remove("local/dnsRecords.bin"))
         std::cout << "Records Flushed Successfully!" << std::endl;
 
