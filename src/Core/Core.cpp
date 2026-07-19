@@ -829,7 +829,75 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
                     truncated = true;
             }
 
-            if (record.is_geo)
+            if (record.is_proxy)
+            {
+                t_ipGroupEntries.clear();
+
+                char countryCode[8];
+
+                auto country = Static::dns->getCountry(ip_str);
+                if (country.empty())
+                    memcpy(countryCode, "DEFAULT", 8);
+                else
+                    memcpy(countryCode, country.data(), 8);
+
+                Main::ipGroupMap->get_record(Main::proxyId, countryCode, t_ipGroupEntries);
+
+                if (t_ipGroupEntries.empty())
+                {
+                    t_ipGroupEntries = DB::Record::getIpGroupEntriesCountryBased(Main::proxyId, countryCode);
+
+                    for (auto &entry : t_ipGroupEntries)
+                        Operational::addQueueForEntry(Main::proxyId, countryCode, {entry.id, entry.ip, entry.priority});
+                }
+
+                for (auto &entry : t_ipGroupEntries)
+                {
+                    record.rdata = entry.ip;
+
+                    uint16_t udp_limit = edns_class ? edns_class : 512;
+                    size_t rr_size =
+                        2 + // pointer
+                        2 + // type
+                        2 + // class
+                        4 + // ttl
+                        2 + // rdlen
+                        record.rdata.size();
+
+                    if (!is_tcp && rlen + rr_size > udp_limit)
+                        truncated = true;
+
+                    if (rlen + rr_size + 32 > sizeof(out))
+                        truncated = true;
+
+                    if (!truncated)
+                    {
+                        w16(0xC00C); // pointer
+                        w16(qtype);
+                        w16(1); // IN
+                        w32(record.ttl);
+
+                        if (qtype == 15) // MX
+                        {
+                            w16(static_cast<uint16_t>(2 + record.rdata.size()));
+                            w16(record.priority);
+                            memcpy(out + rlen, record.rdata.data(), record.rdata.size());
+                            rlen += record.rdata.size();
+                        }
+                        else
+                        {
+                            w16(static_cast<uint16_t>(record.rdata.size()));
+                            memcpy(out + rlen, record.rdata.data(), record.rdata.size());
+                            rlen += record.rdata.size();
+                        }
+
+                        anc++;
+                    }
+                }
+
+                continue;
+            }
+            else if (record.is_geo)
             {
                 t_ipGroupEntries.clear();
 

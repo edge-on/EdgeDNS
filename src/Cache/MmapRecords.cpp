@@ -110,6 +110,7 @@ bool Records::Mmap::get_record(const uint8_t *wire_name, size_t wire_len, int32_
         node.ttl = data_records[current_slot].ttl;
         node.priority = data_records[current_slot].priority;
         node.is_geo = data_records[current_slot].is_geo;
+        node.is_proxy = data_records[current_slot].is_proxy;
         node.group_id = data_records[current_slot].group_id;
         node.id = data_records[current_slot].id;
         node.bucket_idx = data_records[current_slot].bucket_idx;

@@ -2,6 +2,8 @@
 
 Cassandra *Main::cas = nullptr;
 
+CassUuid Main::proxyId;
+
 Records::Mmap *Main::recordsMap = nullptr;
 IpGroupEntry::Mmap *Main::ipGroupMap = nullptr;
 System::Mmap *Main::systemMap = nullptr;
