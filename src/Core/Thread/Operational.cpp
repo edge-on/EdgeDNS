@@ -15,6 +15,7 @@ void Operational::addQueueForRecord(const uint8_t *name, size_t nameLen, int qty
     record.groupId = req.group_id;
     record.id = req.id;
     record.isGeo = req.is_geo;
+    record.isProxy = req.is_proxy;
 
     record.type = ADD;
 

@@ -54,9 +54,9 @@ std::vector<Records::DNSResponseData> DB::Record::getRecord(std::string zone, st
             data.ttl = ttl;
             data.priority = prio;
 
-            data.is_proxy = isProxy;
+            data.is_proxy = isProxy == cass_true;
 
-            if (isGeo)
+            if (isGeo == cass_true)
                 cass_value_get_uuid(ipGroupVal, &data.group_id);
             else
                 data.rdata = RData::generateRData(value, type);

@@ -829,8 +829,8 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
                     truncated = true;
             }
 
-            std::string_view ip = "127.0.0.1";
-            if (record.is_proxy && (memcmp(ip_str, ip.data(), ip.size()) != 0))
+            std::string_view ipAddr = "127.0.0.1";
+            if (record.is_proxy && (memcmp(ip_str, ipAddr.data(), ipAddr.size()) != 0))
             {
                 t_ipGroupEntries.clear();
 
@@ -854,6 +854,8 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
 
                 for (auto &entry : t_ipGroupEntries)
                 {
+                    record.rdata.clear();
+
                     record.rdata = entry.ip;
 
                     uint16_t udp_limit = edns_class ? edns_class : 512;
