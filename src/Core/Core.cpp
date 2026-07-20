@@ -888,7 +888,7 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
                         w16(0xC00C); // pointer
                         w16(qtype);
                         w16(1); // IN
-                        w32(record.ttl);
+                        w32(3600);
 
                         if (qtype == 15) // MX
                         {
@@ -966,7 +966,7 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
                         w16(0xC00C); // pointer
                         w16(qtype);
                         w16(1); // IN
-                        w32(record.ttl);
+                        w32(3600);
 
                         if (qtype == 15) // MX
                         {
@@ -1010,6 +1010,8 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
                 w16(qtype);
                 w16(1); // IN
                 w32(record.ttl);
+
+                std::cout << record.ttl << std::endl;
 
                 if (qtype == 15) // MX
                 {

@@ -35,8 +35,8 @@ std::vector<Records::DNSResponseData> DB::Record::getRecord(std::string zone, st
             const CassValue *isGeoVal = cass_row_get_column_by_name(row, "is_geo");
             const CassValue *isProxyVal = cass_row_get_column_by_name(row, "is_proxy");
 
-            uint32_t ttl;
-            cass_value_get_uint32(ttlVal, &ttl);
+            cass_int32_t ttl;
+            CassError rc = cass_value_get_int32(ttlVal, &ttl);
 
             uint32_t prio;
             cass_value_get_uint32(prioVal, &prio);
@@ -51,6 +51,7 @@ std::vector<Records::DNSResponseData> DB::Record::getRecord(std::string zone, st
             cass_bool_t isProxy;
             cass_value_get_bool(isProxyVal, &isProxy);
 
+            std::cout << "FROM DB: " << ttl << std::endl;
             data.ttl = ttl;
             data.priority = prio;
 
