@@ -100,38 +100,37 @@ bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[8]
     uint64_t hash = calculate_hash_from_uuid(group_id);
     size_t bucket_idx = find_bucket(hash, countryCode, group_id);
 
-    if (bucket_idx == static_cast<size_t>(-1) || hash_table[bucket_idx].group_id_hash == 0)
+    if (bucket_idx != static_cast<size_t>(-1) && hash_table[bucket_idx].group_id_hash != 0)
     {
-        return false;
+        int32_t current_slot = hash_table[bucket_idx].head_slot_idx;
+        size_t visited = 0;
+        while (current_slot >= 0 && current_slot < static_cast<int32_t>(MAX_DATA_RECORDS))
+        {
+            if (!data_entries[current_slot].is_used)
+                break;
+
+            if (++visited > MAX_DATA_RECORDS)
+                break;
+
+            IpGroupEntryResponse node;
+            node.ip.assign(data_entries[current_slot].ip, data_entries[current_slot].ip + data_entries[current_slot].len);
+            node.priority = data_entries[current_slot].priority;
+            node.id = data_entries[current_slot].id;
+
+            out_entries.push_back(node);
+
+            int32_t next_slot = data_entries[current_slot].next_index;
+            if (next_slot == current_slot)
+                break;
+
+            current_slot = next_slot;
+        }
     }
-
-    int32_t current_slot = hash_table[bucket_idx].head_slot_idx;
-    size_t visited = 0;
-    while (current_slot >= 0 && current_slot < static_cast<int32_t>(MAX_DATA_RECORDS))
+    
+    if (out_entries.empty() && strncmp(countryCode, "DEFAULT", 7) != 0)
     {
-        if (!data_entries[current_slot].is_used)
-            break;
-
-        if (++visited > MAX_DATA_RECORDS)
-            break;
-
-        IpGroupEntryResponse node;
-        node.ip.assign(data_entries[current_slot].ip, data_entries[current_slot].ip + data_entries[current_slot].len);
-        node.priority = data_entries[current_slot].priority;
-        node.id = data_entries[current_slot].id;
-
-        out_entries.push_back(node);
-
-        int32_t next_slot = data_entries[current_slot].next_index;
-        if (next_slot == current_slot)
-            break;
-
-        current_slot = next_slot;
-    }
-
-    if (out_entries.empty())
-    {
-        get_record(group_id, "DEFAULT", out_entries);
+        char defaultCode[8] = "DEFAULT";
+        return get_record(group_id, defaultCode, out_entries);
     }
 
     return !out_entries.empty();
