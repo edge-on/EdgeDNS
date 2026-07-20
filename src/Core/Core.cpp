@@ -852,6 +852,16 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
                         Operational::addQueueForEntry(Main::proxyId, countryCode, {entry.id, entry.ip, entry.priority});
                 }
 
+                if (t_ipGroupEntries.empty())
+                {
+                    memcpy(countryCode, "DEFAULT", 8);
+
+                    t_ipGroupEntries = DB::Record::getIpGroupEntriesCountryBased(Main::proxyId, countryCode);
+
+                    for (auto &entry : t_ipGroupEntries)
+                        Operational::addQueueForEntry(Main::proxyId, countryCode, {entry.id, entry.ip, entry.priority});
+                }
+
                 for (auto &entry : t_ipGroupEntries)
                 {
                     record.rdata.clear();
@@ -916,6 +926,16 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
 
                 if (t_ipGroupEntries.empty())
                 {
+                    t_ipGroupEntries = DB::Record::getIpGroupEntriesCountryBased(record.group_id, countryCode);
+
+                    for (auto &entry : t_ipGroupEntries)
+                        Operational::addQueueForEntry(record.group_id, countryCode, {entry.id, entry.ip, entry.priority});
+                }
+
+                if (t_ipGroupEntries.empty())
+                {
+                    memcpy(countryCode, "DEFAULT", 8);
+                    
                     t_ipGroupEntries = DB::Record::getIpGroupEntriesCountryBased(record.group_id, countryCode);
 
                     for (auto &entry : t_ipGroupEntries)

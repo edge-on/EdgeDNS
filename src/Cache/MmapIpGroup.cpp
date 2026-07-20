@@ -127,12 +127,6 @@ bool IpGroupEntry::Mmap::get_record(const CassUuid group_id, char countryCode[8]
         }
     }
     
-    if (out_entries.empty() && strncmp(countryCode, "DEFAULT", 7) != 0)
-    {
-        char defaultCode[8] = "DEFAULT";
-        return get_record(group_id, defaultCode, out_entries);
-    }
-
     return !out_entries.empty();
 }
 
