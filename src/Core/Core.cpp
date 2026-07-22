@@ -780,8 +780,8 @@ ssize_t Core::handle(uint8_t *buffer, bool is_tcp, uint32_t ip, char *ip_str, Ge
         response_flags |= 0x0004; // NOTIMP
     if (qdcount != 1)
         response_flags |= 0x0001; // FORMERR
-    if (qtype != 1)
-        response_flags |= 0x0005; // REFUSED
+    /*if (qtype != 1)
+        response_flags |= 0x0005; // REFUSED*/
 
     w16(response_flags);
     w16(1); // QDCOUNT
